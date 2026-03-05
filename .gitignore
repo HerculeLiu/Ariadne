@@ -30,7 +30,13 @@ htmlcov/
 # Logs / runtime
 *.log
 *.pid
+logs/
+storage/
 
 # Temporary files
 tmp/
 .temp/
+
+# Local agent / tooling metadata
+.agents/
+.claude/
