@@ -429,14 +429,7 @@
       font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: #fff;
       box-shadow: 0 4px 14px rgba(48,42,30,.08);
     }}
-    .msg.user-wrapper {{
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 8px;
-    }}
-    .msg.user {{ align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; border: 1px solid var(--bg-1); }}
+    .msg.user {{ width: 100%; background: #f9f4ea; align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; border: 1px solid #f9f4ea; box-shadow: none; }}
     .msg.assistant {{ align-self: flex-start; color: #2e3941; }}
     .msg-refs {{
       display: flex;
@@ -449,12 +442,12 @@
       flex-direction: column;
       padding: 5px 8px;
       border-radius: 6px;
-      background: #f7f2e7;
+      background: #f9f4ea;
       cursor: pointer;
       transition: all 0.15s ease;
     }}
     .msg-ref-card:hover {{
-      background: #f0eadf;
+      background: #f4ecdf;
     }}
     .msg-ref-title {{
       font-size: 13px;
@@ -480,11 +473,9 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       padding: 8px 10px;
-      background: #eef4f0;
-      border-color: #b6c9bf;
+      background: #f9f4ea;
       color: #1f4b3d;
       word-break: break-word;
-      box-shadow: 0 4px 14px rgba(48,42,30,.08);
       max-width: 280px;
     }}
     .chat-tools {{
@@ -507,7 +498,9 @@
       z-index: 4;
       margin: -14px 10px 0;
       padding: 0;
-      background: transparent;
+      background: #f9f4ea;
+      border-radius: 14px 14px 0 0;
+      overflow: hidden;
       --stack-card-h: 34px;
       --stack-peek: 12px;
     }}
@@ -534,9 +527,10 @@
       width: 100%;
     }}
     .chat-selected-row:not(:first-child) {{
-      background: transparent;
+      background: linear-gradient(180deg, #fffaf2, #f7eddc);
       box-shadow: none;
       border-color: #d8cdbd;
+      border-radius: 14px 14px 0 0;
     }}
     .chat-selected-row span {{
       overflow: hidden;
@@ -743,9 +737,6 @@
       if (!list) return;
 
       if (role === 'user' && chunks.length > 0) {{
-        const outerWrapper = document.createElement('div');
-        outerWrapper.className = 'msg user-wrapper';
-
         const wrapper = document.createElement('div');
         wrapper.className = 'msg user';
 
@@ -765,16 +756,12 @@
           <div class='msg-refs'>${{chunksHtml}}</div>
           ${{text ? `<div class='msg-user-text-inner'>${{esc(text)}}</div>` : ''}}
         `;
-        outerWrapper.appendChild(wrapper);
-        list.appendChild(outerWrapper);
+        list.appendChild(wrapper);
       }} else if (role === 'user') {{
-        const outerWrapper = document.createElement('div');
-        outerWrapper.className = 'msg user-wrapper';
         const wrapper = document.createElement('div');
         wrapper.className = 'msg user';
         wrapper.innerHTML = `<div class='msg-user-text-inner'>${{esc(text)}}</div>`;
-        outerWrapper.appendChild(wrapper);
-        list.appendChild(outerWrapper);
+        list.appendChild(wrapper);
       }} else {{
         const row = document.createElement('div');
         row.className = `msg ${{role}}`;
