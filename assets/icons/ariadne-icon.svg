@@ -1,0 +1,43 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Ariadne Product Icon</title>
+  <desc id="desc">A circular learning icon combining a labyrinth ring, guiding thread, and knowledge nodes.</desc>
+
+  <defs>
+    <linearGradient id="bgGrad" x1="64" y1="48" x2="448" y2="464" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F4FFF8"/>
+      <stop offset="1" stop-color="#DDF5E8"/>
+    </linearGradient>
+    <linearGradient id="ringGrad" x1="110" y1="100" x2="402" y2="412" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0D6A47"/>
+      <stop offset="1" stop-color="#1EA672"/>
+    </linearGradient>
+    <linearGradient id="threadGrad" x1="164" y1="332" x2="356" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F08B1D"/>
+      <stop offset="1" stop-color="#E65F22"/>
+    </linearGradient>
+    <filter id="softShadow" x="0" y="0" width="512" height="512" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#0A3D2A" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <rect x="48" y="48" width="416" height="416" rx="112" fill="url(#bgGrad)"/>
+
+    <circle cx="256" cy="256" r="156" stroke="url(#ringGrad)" stroke-width="26"/>
+    <circle cx="256" cy="256" r="116" stroke="#24A06E" stroke-opacity="0.28" stroke-width="14"/>
+    <circle cx="256" cy="256" r="82" stroke="#24A06E" stroke-opacity="0.18" stroke-width="10"/>
+
+    <path d="M164 330C206 314 220 272 252 258C286 243 307 258 344 216" stroke="url(#threadGrad)" stroke-width="18" stroke-linecap="round"/>
+
+    <circle cx="162" cy="332" r="20" fill="#F08B1D"/>
+    <circle cx="162" cy="332" r="8" fill="#FFF5E9"/>
+
+    <circle cx="346" cy="214" r="24" fill="#0F6E4B"/>
+    <path d="M334 214H358M346 202V226" stroke="#E8FFF2" stroke-width="6" stroke-linecap="round"/>
+
+    <circle cx="256" cy="256" r="18" fill="#146F4D"/>
+    <circle cx="256" cy="256" r="7" fill="#E7FFF1"/>
+
+    <path d="M312 156L322 178L346 182L328 198L332 222L312 211L292 222L296 198L278 182L302 178L312 156Z" fill="#22A872"/>
+  </g>
+</svg>

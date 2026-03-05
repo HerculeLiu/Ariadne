@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Distribution / build
+build/
+dist/
+*.egg-info/
+
+# Test / coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local env files
+.env
+.env.local
+
+# Logs / runtime
+*.log
+*.pid
+
+# Temporary files
+tmp/
+.temp/

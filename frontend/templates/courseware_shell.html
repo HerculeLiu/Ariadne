@@ -1,0 +1,1257 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>{escaped_title}</title>
+  <style>
+    :root {{
+      --bg-1:#f8f5ee; --bg-2:#ece5d7; --panel:#fcfaf4; --line:#d4cdc0;
+      --text:#172127; --muted:#59646d; --accent:#2f5d4c; --accent-soft:#f4ecdf;
+      --chip:#f2ebdf; --chip-text:#3c4b56;
+      --glow-1:rgba(78,122,105,0.15); --glow-2:rgba(189,123,74,0.12);
+      --card-shadow:0 12px 30px rgba(48,42,30,.12), 0 2px 8px rgba(48,42,30,.06);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin:0; color:var(--text);
+      font:16px/1.68 'Avenir Next','SF Pro Text','Segoe UI','PingFang SC',sans-serif;
+      background:
+        radial-gradient(1000px 420px at -10% -10%, rgba(78,122,105,.18) 0%, transparent 60%),
+        radial-gradient(900px 380px at 105% -10%, rgba(189,123,74,.14) 0%, transparent 60%),
+        linear-gradient(160deg,var(--bg-1),var(--bg-2));
+      overflow: hidden;
+    }}
+    .app {{ width:100%; margin:0; padding:0; }}
+    .back-home {{
+      display:flex; align-items:center; justify-content:center;
+      border: 1px solid var(--line); border-radius: 10px; text-decoration: none;
+      background: #fffdf8; color: var(--text); padding: 8px 10px; font-weight: 700; font-size: 13px;
+      box-shadow: 0 4px 14px rgba(48,42,30,.12);
+      margin: 0 0 8px;
+      min-height: 38px;
+    }}
+    .back-home:hover {{ background:#f8f1e6; }}
+    .layout.nav-collapsed .back-home {{ font-size: 0; padding: 8px 0; }}
+    .layout.nav-collapsed .back-home::before {{ content: '⌂'; font-size: 18px; line-height: 1; }}
+    .hero {{ border:1px solid var(--line); border-radius:18px; background:var(--panel); padding:18px 20px; }}
+    .hero h1 {{ margin:0; font-size:34px; }}
+    .hero p {{ margin:8px 0 0; color:var(--muted); }}
+    .layout {{ margin-top:0; }}
+    .panel {{ border:1px solid var(--line); border-radius:14px; background:var(--panel); }}
+    .nav {{
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 270px;
+      padding: 14px 10px 12px;
+      border-left: none;
+      border-radius: 0 14px 14px 0;
+      overflow: auto;
+      z-index: 40;
+      transition: width .2s ease;
+      background: linear-gradient(180deg,#fffdf8,#f7f2e7);
+      border-right: 1px solid var(--line);
+      box-shadow: 10px 0 26px rgba(48,42,30,.12);
+    }}
+    .layout.nav-collapsed .nav {{ width: 56px; padding: 14px 8px 12px; }}
+    .nav.collapsed {{ overflow: hidden; }}
+    .nav h3 {{ margin:4px 6px 8px; font-size:14px; color:var(--muted); }}
+    .nav-toggle {{
+      width: 40px; height: 40px; border:1px solid var(--line); background:#fffdf8; color:var(--text);
+      border-radius:10px; padding:0; cursor:pointer; margin:0 0 10px 0; display:grid; place-items:center;
+      justify-self:start; transform: none;
+    }}
+    .nav-toggle, .chat-toggle, .chat-tool {{ position: relative; }}
+    .nav-toggle::after, .chat-toggle::after, .chat-tool::after {{
+      content: attr(data-tip);
+      position: absolute;
+      left: 50%;
+      transform: translate(-50%, 6px);
+      bottom: -30px;
+      background: #2f3a43;
+      color: #f6efe4;
+      border: 1px solid #4f5d68;
+      border-radius: 8px;
+      padding: 3px 7px;
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s ease, transform .12s ease;
+      z-index: 90;
+    }}
+    .nav-toggle:hover::after, .chat-toggle:hover::after, .chat-tool:hover::after {{
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }}
+    .nav-toggle svg {{ width: 18px; height: 18px; }}
+    .chapter-item {{
+      width:100%; border:1px solid var(--line); background:#fffdf8; color:var(--text); border-radius:12px;
+      padding:10px 11px; margin-bottom:8px; text-align:left; cursor:pointer;
+      transition:all .18s ease;
+    }}
+    .chapter-item:hover {{ transform: translateY(-1px); box-shadow: 0 8px 18px rgba(48,42,30,.08); border-color:#bfb39d; }}
+    .chapter-item.active {{ border-color:#97b3a7; background:#f1f6f2; color:#1e4b3c; font-weight:700; box-shadow: 0 10px 20px rgba(47,93,76,.14); }}
+    .chapter-group {{ margin-bottom: 8px; }}
+    .chunk-nav-list {{
+      margin: 2px 0 8px;
+      display: grid;
+      gap: 4px;
+      padding-left: 8px;
+    }}
+    .chunk-nav-item {{
+      width: 100%;
+      border: 1px solid #e2d8c8;
+      border-radius: 9px;
+      background: #fffaf2;
+      color: #4d5963;
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 6px 8px;
+      text-align: left;
+      cursor: pointer;
+      transition: all .16s ease;
+    }}
+    .chunk-nav-item:hover {{
+      border-color: #cbbfa9;
+      background: #f8efdf;
+    }}
+    .chunk-nav-item.active {{
+      border-color: #97b3a7;
+      background: #eef5f0;
+      color: #1f4b3d;
+      font-weight: 600;
+    }}
+    .nav.collapsed h3, .nav.collapsed #chapterNav {{ display:none; }}
+    .main {{
+      position: fixed;
+      left: 286px;
+      right: 396px;
+      top: 12px;
+      bottom: 12px;
+      padding: 18px;
+      overflow-y: auto;
+      transition: left .2s ease, right .2s ease;
+      background: linear-gradient(180deg, #fffdf8, #f7f0e4);
+      box-shadow: var(--card-shadow);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+    }}
+    .layout.nav-collapsed .main {{ left: 72px; }}
+    body.chat-collapsed .main {{ right: 68px; }}
+    .btn {{ border:none; background:var(--accent); color:#fff; border-radius:9px; padding:8px 11px; cursor:pointer; }}
+    .btn.secondary {{ background:#6f7f8c; }}
+    .progress {{ display:none; height:8px; background:#ece3d6; border-radius:999px; overflow:hidden; border:1px solid #d4cdc0; margin-bottom:14px; }}
+    .progress > i {{ display:block; height:100%; width:0%; background:linear-gradient(90deg,#2f5d4c,#3f7661); transition:width .2s ease; }}
+    .chunk-card {{
+      margin-top:14px; border:1px solid var(--line); border-radius:16px; padding:16px;
+      background:linear-gradient(180deg,#fffdf8,#faf4e9);
+      box-shadow: var(--card-shadow);
+      position: relative;
+      overflow: hidden;
+    }}
+    .chunk-add-btn {{
+      position: absolute;
+      right: 12px;
+      top: 10px;
+      width: 24px;
+      height: 24px;
+      border: 1px solid #cbbca6;
+      border-radius: 8px;
+      background: #fff9ef;
+      color: #2f5d4c;
+      font-weight: 700;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      z-index: 2;
+    }}
+    .chunk-add-btn:hover {{ background: #f3e8d8; }}
+    .chunk-add-btn.selected {{
+      background: linear-gradient(135deg, #2f5d4c, #3f7661);
+      border-color: transparent;
+      color: #f8f4ea;
+      text-indent: -3px;
+    }}
+    .chunk-card:before {{
+      content:'';
+      position:absolute; inset:0 auto auto 0; width:100%; height:3px;
+      background:linear-gradient(90deg,#2f5d4c,#3f7661,#c46f35);
+      opacity:.92;
+    }}
+    .main .chunk-card:first-of-type {{ margin-top: 10px; }}
+    .chunk-kicker {{
+      display:inline-flex; align-items:center; gap:8px;
+      font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+      color:#3f4e59; background:var(--chip); border:1px solid var(--line); border-radius:999px; padding:5px 9px;
+      margin:2px 0 8px;
+    }}
+    .chunk-card h2 {{ margin:0 0 10px; font-size:32px; line-height:1.24; color:#1f2c33; letter-spacing:.12px; }}
+    .chunk-card h4 {{ margin:12px 0 7px; font-size:15px; color:#4d5a63; text-transform:uppercase; letter-spacing:.4px; }}
+    .chunk-card p {{ margin:11px 0; color:#2e3941; font-size:16px; }}
+    .chunk-card p:first-of-type {{ font-size:19px; color:#243138; }}
+    .chunk-card code {{ background:#f5ede2; border:1px solid #dbcdb8; border-radius:6px; padding:1px 5px; color:#35434c; }}
+    .content-flow .chapter-block {{
+      border:1px solid #e7dccb; border-radius:16px;
+      background:transparent;
+      padding:14px; margin-bottom:14px;
+      box-shadow: none;
+      position: relative;
+      overflow: hidden;
+    }}
+    .content-flow .chapter-block:after {{
+      content:'';
+      position:absolute; right:-80px; top:-120px; width:220px; height:220px;
+      border-radius:50%;
+      background: radial-gradient(circle, rgba(196,111,53,.14), rgba(196,111,53,0) 72%);
+      pointer-events:none;
+    }}
+    .chapter-head {{
+      display:flex; align-items:center; gap:10px;
+      margin:0 0 10px; padding:2px 2px 2px;
+    }}
+    .chapter-index {{ display:none; }}
+    .chapter-title {{ margin:0; color:#1f2c33; font-size:30px; letter-spacing:.2px; }}
+    .content-flow .chunk-card {{
+      margin-top:14px;
+      border:1px solid #d8c9b2;
+      border-radius:18px;
+      padding:18px;
+      background:linear-gradient(180deg,#fffdf8,#faf4e9);
+      box-shadow: 0 14px 28px rgba(48,42,30,.11), 0 2px 8px rgba(48,42,30,.06);
+      position: relative;
+      overflow: hidden;
+    }}
+    .content-flow .chunk-card:before {{
+      content:'';
+      position:absolute; inset:0 auto auto 0; width:100%; height:3px;
+      background:linear-gradient(90deg,#2f5d4c,#3f7661,#c46f35);
+      opacity:.92;
+    }}
+    .chunk-card.is-selected {{
+      border-color: #8fb3a3 !important;
+      box-shadow: 0 0 0 3px rgba(63,118,97,.15), var(--card-shadow) !important;
+    }}
+    .chunk-card.flash-added {{
+      animation: chunkFlash 0.9s ease;
+    }}
+    @keyframes chunkFlash {{
+      0% {{ box-shadow: 0 0 0 0 rgba(63,118,97,.0), var(--card-shadow); }}
+      35% {{ box-shadow: 0 0 0 6px rgba(63,118,97,.22), var(--card-shadow); }}
+      100% {{ box-shadow: 0 0 0 0 rgba(63,118,97,.0), var(--card-shadow); }}
+    }}
+    ul {{ margin:8px 0 0 20px; padding-left:4px; }}
+    li {{ margin:5px 0; }}
+    table {{ width:100%; border-collapse:separate; border-spacing:0; margin:10px 0; font-size:14px; border:1px solid var(--line); border-radius:12px; overflow:hidden; }}
+    th,td {{ border-right:1px solid #d9d1c5; border-bottom:1px solid #d9d1c5; padding:9px 10px; text-align:left; vertical-align:top; }}
+    tr:last-child td {{ border-bottom:none; }}
+    th:last-child, td:last-child {{ border-right:none; }}
+    th {{ background:linear-gradient(180deg,#f5ede2,#efe5d7); color:#2c3841; font-weight:700; }}
+    tbody tr:nth-child(odd) td {{ background:#fffaf1; }}
+    pre {{
+      margin:10px 0; background:#2e3740; border:1px solid #49545f; border-radius:10px; padding:10px 12px;
+      white-space:pre-wrap; color:#f3ecde; font-size:13px; line-height:1.6;
+    }}
+    .interaction {{
+      margin-top:10px; border:1px dashed #b9ab95; border-radius:12px; background:var(--accent-soft); padding:12px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.7);
+    }}
+    .interaction strong {{ color:#2f5d4c; }}
+    .interaction button {{
+      border:none; background:linear-gradient(135deg,#2f5d4c,#3f7661); color:#fff;
+      border-radius:10px; padding:7px 12px; cursor:pointer; margin-top:8px; font-weight:700;
+      box-shadow:0 6px 14px rgba(47,93,76,.26);
+    }}
+    .interaction pre {{
+      margin-top:8px; display:none; background:#fff; border:1px solid #d9ccb8; border-radius:10px; padding:9px;
+      white-space:pre-wrap; color:#304049;
+    }}
+    .footer-nav {{ margin-top:12px; display:flex; justify-content:space-between; gap:10px; }}
+    .inspector-fab {{
+      position: fixed; top: 12px; right: 510px; z-index: 60;
+      border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 700;
+      background: #2f5d4c; color: #f8f4ea; border: 1px solid #3f7661; cursor: pointer;
+      box-shadow: 0 4px 14px rgba(48,42,30,0.25);
+    }}
+    .inspector-fab.active {{ background: linear-gradient(120deg,#3f7661,#2f5d4c); border-color: transparent; }}
+    .inspector-hint {{
+      position: fixed; top: 48px; right: 510px; z-index: 60;
+      padding: 6px 10px; border-radius: 8px; border: 1px solid #4a5f6f;
+      background: #38444d; color: #f3ecde; font-size: 12px; display: none;
+    }}
+    .inspect-target {{ outline:2px dashed #e7a33d !important; outline-offset:2px; cursor:crosshair !important; }}
+    .inspector-modal-mask {{
+      position: fixed; inset: 0; background: rgba(42,38,31,0.35); z-index: 80; display: none;
+      align-items: center; justify-content: center; padding: 14px;
+    }}
+    .inspector-modal {{
+      width: min(760px, 100%); background:#fffdf8; border:1px solid var(--line); border-radius:14px; padding:14px; display:grid; gap:10px;
+      box-shadow: 0 14px 36px rgba(48,42,30,0.2);
+    }}
+    .inspector-modal h3 {{ margin: 0; color:#243138; font-size:18px; }}
+    .inspector-modal pre {{
+      margin: 0; background:#f8f1e6; border:1px solid #d9ccb8; border-radius:8px; padding:8px; max-height:150px; overflow:auto;
+      color:#304049; font-size:12px; white-space:pre-wrap; word-break:break-word;
+    }}
+    .inspector-modal textarea {{
+      min-height:120px; border:1px solid #d9ccb8; border-radius:10px; padding:9px 10px; font-size:14px; font-family:inherit;
+      background:#fff; color:#2e3941;
+    }}
+    .inspector-actions {{ display:flex; gap:10px; flex-wrap:wrap; }}
+    .inspector-actions button {{ border:none; border-radius:10px; padding:9px 12px; cursor:pointer; }}
+    .inspector-copy {{ background:#2f5d4c; color:#fff; }}
+    .inspector-close {{ background:#fff9ef; color:#7a5318; border:1px solid #f0d7a5; }}
+    .chat-side {{
+      position: fixed; right: 0; top: 0; bottom: 0; width: 380px;
+      border-left: 1px solid var(--line); background: #f9f4ea;
+      display: flex; flex-direction: column; z-index: 30;
+      box-shadow: -10px 0 28px rgba(48,42,30,.12);
+      transition: width .2s ease;
+    }}
+    .chat-head {{
+      position: relative;
+      padding: 14px 12px 10px; border-bottom: 1px solid var(--line); background: #fffdf8;
+      background:
+        radial-gradient(420px 120px at 15% -30%, rgba(78,122,105,.18), transparent 70%),
+        radial-gradient(380px 120px at 90% -20%, rgba(189,123,74,.14), transparent 72%),
+        #fffdf8;
+    }}
+    .chat-toggle {{
+      position:absolute; right:10px; top:10px;
+      width:30px; height:30px; border:1px solid var(--line); background:#fffdf8;
+      border-radius:8px; display:grid; place-items:center; cursor:pointer; color:#4f5e6b;
+    }}
+    .chat-toggle svg {{ width:15px; height:15px; }}
+    .chat-toggle:hover {{ background:#f4ecdf; }}
+    .chat-title {{ font-size: 16px; font-weight: 700; color: #243138; }}
+    .chat-sub {{ margin-top: 2px; font-size: 12px; color: #6a737b; }}
+    .chat-list {{
+      flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+      background: linear-gradient(180deg,#f9f4ea,#f4ecdf);
+    }}
+    .msg {{
+      max-width: 92%; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px;
+      font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: #fff;
+      box-shadow: 0 4px 14px rgba(48,42,30,.08);
+    }}
+    .msg.user {{ align-self: flex-end; background: #eef4f0; border-color: #b6c9bf; color: #1f4b3d; }}
+    .msg.assistant {{ align-self: flex-start; color: #2e3941; }}
+    .chat-tools {{
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border-top: 1px solid var(--line); background: #fffdf8;
+    }}
+    .chat-tool {{
+      width: 30px; height: 30px; border: 1px solid var(--line); background: #fffdf8;
+      border-radius: 8px; display: grid; place-items: center; cursor: pointer; color: #4f5e6b;
+    }}
+    .chat-tool:hover {{ background: #f4ecdf; }}
+    .chat-tool svg {{ width: 15px; height: 15px; }}
+    .chat-input {{
+      border-top: 1px solid var(--line); background: #fffdf8; padding: 8px 10px;
+      display: grid; grid-template-columns: 1fr auto; gap: 8px;
+    }}
+    .chat-selected {{
+      display: none;
+      position: relative;
+      z-index: 4;
+      margin: -14px 10px 0;
+      padding: 0;
+      background: transparent;
+      --stack-card-h: 34px;
+      --stack-peek: 12px;
+    }}
+    .chat-selected.has-items {{ display: block; }}
+    .chat-selected-row {{
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(var(--stack-index, 0) * var(--stack-peek));
+      z-index: calc(240 - var(--stack-index, 0));
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 6px;
+      box-sizing: border-box;
+      border: 1px solid #d8cdbd;
+      border-bottom: none;
+      background: linear-gradient(180deg, #fffaf2, #f7eddc);
+      border-radius: 14px 14px 0 0;
+      height: var(--stack-card-h);
+      padding: 0 10px;
+      color: #4a5560;
+      box-shadow: 0 -4px 9px rgba(87, 63, 33, 0.10);
+      width: 100%;
+    }}
+    .chat-selected-row:not(:first-child) {{
+      background: transparent;
+      box-shadow: none;
+      border-color: #d8cdbd;
+    }}
+    .chat-selected-row span {{
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      font-size: 12px;
+      line-height: 1.1;
+    }}
+    .chat-selected-row:not(:first-child) span {{
+      font-size: 11px;
+      line-height: 1;
+    }}
+    .chat-selected-remove {{
+      width: 16px;
+      height: 16px;
+      border: 1px solid #8d6940;
+      border-radius: 6px;
+      background: rgba(255, 249, 239, 0.8);
+      color: #5f3518;
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      padding: 0;
+    }}
+    .chat-selected-row:not(:first-child) .chat-selected-remove {{
+      width: 14px;
+      height: 14px;
+      font-size: 10px;
+      border-radius: 5px;
+    }}
+    .chat-selected-remove:hover {{ background: #f9ead4; }}
+    .chat-input textarea {{
+      min-height: 66px; max-height: 132px; resize: none; border: 1px solid #d9ccb8; border-radius: 10px;
+      padding: 8px 9px; font-size: 13px; font-family: inherit; color: #2e3941; background: #fff;
+    }}
+    .chat-input textarea:focus {{ outline:none; border-color:#9cb5aa; box-shadow:0 0 0 3px rgba(78,122,105,.14); }}
+    .chat-send {{ min-width: 78px; font-weight:700; letter-spacing:.2px; }}
+    body.chat-collapsed .chat-side {{ width: 52px; }}
+    body.chat-collapsed .chat-head {{
+      padding: 10px 8px;
+      border-bottom: none;
+      background: #f9f4ea;
+      min-height: 52px;
+    }}
+    body.chat-collapsed .chat-title,
+    body.chat-collapsed .chat-sub,
+    body.chat-collapsed .chat-list,
+    body.chat-collapsed .chat-tools,
+    body.chat-collapsed .chat-input {{ display:none; }}
+    body.chat-collapsed .chat-toggle {{ left: 10px; right: auto; }}
+    @keyframes cardIn {{
+      from {{ opacity:0; transform: translateY(8px); }}
+      to {{ opacity:1; transform: translateY(0); }}
+    }}
+    .chunk-card {{ animation: cardIn .24s ease both; }}
+    .chat-send {{ min-width: 78px; }}
+    @media (max-width: 980px) {{
+      .nav {{ width: 220px; }}
+      .main {{ left: 236px; right: 12px; top: 10px; bottom: 10px; }}
+      .layout.nav-collapsed .nav {{ width: 52px; }}
+      .layout.nav-collapsed .main {{ left: 68px; }}
+      .chat-side {{ display: none; }}
+      .back-home {{ margin-bottom: 8px; }}
+      .inspector-fab {{ right: 14px; }}
+      .inspector-hint {{ right: 14px; }}
+    }}
+  </style>
+</head>
+<body>
+  <button id='inspectorFab' class='inspector-fab' data-inspector-ui='1'>元素定位</button>
+  <div id='inspectorHint' class='inspector-hint' data-inspector-ui='1'>选择模式已开启：点击任意页面元素</div>
+  <div id='inspectorModalMask' class='inspector-modal-mask' data-inspector-ui='1'>
+    <div class='inspector-modal' data-inspector-ui='1'>
+      <h3>元素定位信息</h3>
+      <div style='font-size:12px;color:#59646d;'>输入你希望 LLM 如何修改该元素（可多行）。</div>
+      <pre id='inspectorTargetInfo'></pre>
+      <textarea id='inspectorNote' placeholder='例如：把这个标题改成“核心概念速览”，并缩小字号到 26px。'></textarea>
+      <div class='inspector-actions'>
+        <button id='inspectorCopyBtn' class='inspector-copy'>复制</button>
+        <button id='inspectorCloseBtn' class='inspector-close'>关闭</button>
+      </div>
+    </div>
+  </div>
+  <div class='app'>
+    <section class='hero' id='heroSection'>
+      <h1 id='courseTitle'></h1>
+    </section>
+    <div class='layout'>
+      <aside class='panel nav'>
+        <a class='back-home' id='backHomeBtn' href='/' data-tip='返回首页'>返回首页</a>
+        <button id='navToggleBtn' class='nav-toggle' title='收起/展开导航' aria-label='收起/展开导航' data-tip='收起导航'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3.5' y='4.5' width='17' height='15' rx='2.5'></rect><path d='M8.5 4.5v15'></path><path d='M16 12h-5'></path><path d='M13 9l-3 3 3 3'></path></svg></button>
+        <h3>章节导航</h3>
+        <div id='chapterNav'>{initial_nav_html}</div>
+      </aside>
+      <main class='panel main'>
+        <div class='progress'><i id='bar'></i></div>
+        <div id='contentFlow' class='content-flow' style='display:block;'>{initial_content_html}</div>
+        <article class='chunk-card' id='chunkCard' style='display:none;'></article>
+        <article class='chunk-card' id='renderFallbackCard' style='display:none;'>
+          <h2>内容加载中</h2>
+          <p>如果页面长时间空白，请刷新后重试。</p>
+        </article>
+        <div class='footer-nav' id='pagerNav' style='display:none;'>
+          <button class='btn secondary' id='prevBtn'>上一块</button>
+          <button class='btn' id='nextBtn'>下一块</button>
+        </div>
+      </main>
+    </div>
+  </div>
+  <aside class='chat-side'>
+    <div class='chat-head'>
+      <button id='chatToggleBtn' class='chat-toggle' title='收起/展开聊天栏' aria-label='收起/展开聊天栏' data-tip='收起聊天栏'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3.5' y='4.5' width='17' height='15' rx='2.5'></rect><path d='M15.5 4.5v15'></path><path d='M10 12h5'></path><path d='M13 9l3 3-3 3'></path></svg></button>
+      <div class='chat-title'>Chat</div>
+      <div class='chat-sub'>General conversation mode.</div>
+    </div>
+    <div id='chatList' class='chat-list'>
+      <div class='msg assistant'>Hi, I am ready. Ask me anything.</div>
+    </div>
+    <div id='chatSelected' class='chat-selected'></div>
+    <div class='chat-tools'>
+      <button id='chatUploadBtn' class='chat-tool' title='Upload File' aria-label='Upload File' data-tip='上传文件'>
+        <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+          <path d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'></path>
+          <path d='M17 8l-5-5-5 5'></path>
+          <path d='M12 3v12'></path>
+        </svg>
+      </button>
+      <input id='chatUploadInput' type='file' style='display:none' accept='.pdf,.md,.txt,.doc,.docx,.ppt,.pptx,.csv,.json,.py,.js,.ts,.html,.css'>
+    </div>
+    <div class='chat-input'>
+      <textarea id='chatInput' placeholder='Ask anything...'></textarea>
+      <button id='chatSendBtn' class='btn chat-send'>Send</button>
+    </div>
+  </aside>
+
+  <script>
+    const MODEL = {payload_json};
+    const RENDER_CONFIG = {config_json};
+    const state = {{ chapterIdx: 0, chunkIdx: 0 }};
+    const inspectState = {{ active: false, hoverEl: null, selectedMeta: null }};
+    const chatState = {{ sessionId: '', sending: false, selectedChunks: [] }};
+    const $ = (id) => document.getElementById(id);
+    function showContentFallback(reason) {{
+      const fallback = $('renderFallbackCard');
+      const flow = $('contentFlow');
+      const card = $('chunkCard');
+      const pager = $('pagerNav');
+      if (!fallback) return;
+      if (flow) flow.style.display = 'none';
+      if (card) card.style.display = 'none';
+      if (pager) pager.style.display = 'none';
+      try {{
+        const chapters = Array.isArray(MODEL && MODEL.chapters) ? MODEL.chapters : [];
+        const firstChapter = chapters.find((x) => Array.isArray(x && x.chunks) && x.chunks.length > 0);
+        const firstChunk = firstChapter ? firstChapter.chunks[0] : null;
+        if (firstChunk) {{
+          const title = normalizeChunkTitle(firstChunk.title || '') || '首个 Chunk';
+          const body = chunkPlainText(firstChunk) || '（该内容为空）';
+          fallback.innerHTML = `<h2>${{inlineMd(title)}}</h2><p>${{inlineMd(body)}}</p>`;
+        }} else {{
+          fallback.innerHTML = `<h2>暂无内容</h2><p>当前课件没有可展示的章节或 chunk。</p>`;
+        }}
+      }} catch (_) {{
+        fallback.innerHTML = `<h2>渲染失败</h2><p>${{esc(reason || '发生未知错误')}}。</p>`;
+      }}
+      fallback.style.display = 'block';
+    }}
+    const chatCoursewareId = (() => {{
+      const m = String(location.pathname || '').match(/\/downloads\/([^/]+)\.html$/);
+      return m ? m[1] : '';
+    }})();
+
+    async function apiJson(path, options = {{}}) {{
+      const res = await fetch(path, {{ headers: {{ 'Content-Type': 'application/json' }}, ...options }});
+      return res.json();
+    }}
+    function appendChat(role, text) {{
+      const list = $('chatList');
+      if (!list) return;
+      const row = document.createElement('div');
+      row.className = `msg ${{role}}`;
+      row.textContent = text;
+      list.appendChild(row);
+      list.scrollTop = list.scrollHeight;
+    }}
+    async function ensureChatSession() {{
+      if (chatState.sessionId) return chatState.sessionId;
+      const payload = {{
+        courseware_id: chatCoursewareId,
+        page_id: 'pg_generated',
+        chunk_id: '',
+      }};
+      const data = await apiJson('/api/v1/chat/sessions', {{
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }});
+      if (data.code !== 0 || !data.data || !data.data.id) {{
+        throw new Error(data.message || 'chat session create failed');
+      }}
+      chatState.sessionId = data.data.id;
+      return chatState.sessionId;
+    }}
+    async function sendChatMessage() {{
+      if (chatState.sending) return;
+      const box = $('chatInput');
+      const btn = $('chatSendBtn');
+      const text = (box && box.value ? box.value : '').trim();
+      if (!text && !chatState.selectedChunks.length) return;
+      const selectedPayload = chatState.selectedChunks
+        .map((x) => `[${{x.label}}]\\n${{x.content}}`)
+        .join('\\n\\n');
+      const message = [selectedPayload, text].filter(Boolean).join('\\n\\n');
+      appendChat('user', message);
+      if (box) box.value = '';
+      autoGrowChatInput();
+      chatState.selectedChunks = [];
+      renderSelectedChunks();
+      chatState.sending = true;
+      if (btn) btn.disabled = true;
+      try {{
+        const sessionId = await ensureChatSession();
+        const data = await apiJson('/api/v1/chat/messages', {{
+          method: 'POST',
+          body: JSON.stringify({{ session_id: sessionId, message }}),
+        }});
+        if (data.code !== 0) {{
+          appendChat('assistant', `Request failed: ${{data.message || 'unknown error'}}`);
+          return;
+        }}
+        appendChat('assistant', (data.data && data.data.reply) || 'No response');
+      }} catch (err) {{
+        appendChat('assistant', `Request failed: ${{err && err.message ? err.message : String(err)}}`);
+      }} finally {{
+        chatState.sending = false;
+        if (btn) btn.disabled = false;
+      }}
+    }}
+    async function uploadChatFile(file) {{
+      if (!file) return;
+      appendChat('user', `[file] ${{file.name}}`);
+      try {{
+        const up = await apiJson('/api/v1/assets/upload', {{
+          method: 'POST',
+          body: JSON.stringify({{ file_name: file.name, size_bytes: file.size }}),
+        }});
+        if (up.code !== 0) {{
+          appendChat('assistant', `Upload failed: ${{up.message || 'unknown error'}}`);
+          return;
+        }}
+        const assetId = up.data && up.data.asset_id ? up.data.asset_id : '';
+        if (!assetId) {{
+          appendChat('assistant', 'Upload failed: missing asset id');
+          return;
+        }}
+        appendChat('assistant', `Uploaded: ${{file.name}} (asset_id=${{assetId}})`);
+      }} catch (err) {{
+        appendChat('assistant', `Upload failed: ${{err && err.message ? err.message : String(err)}}`);
+      }}
+    }}
+
+    function flatCount() {{
+      return MODEL.chapters.reduce((acc, c) => acc + c.chunks.length, 0) || 1;
+    }}
+    function flatIndex(chapterIdx, chunkIdx) {{
+      let idx = 0;
+      for (let i = 0; i < chapterIdx; i += 1) idx += MODEL.chapters[i].chunks.length;
+      return idx + chunkIdx;
+    }}
+    function esc(s) {{
+      return String(s || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+    }}
+    function normalizeEscapes(text) {{
+      // Convert literal escape sequences from model output into visible HTML line breaks.
+      return String(text || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\n/g, '\n')
+        .replace(/\t/g, '    ');
+    }}
+    function inlineMd(text) {{
+      let s = esc(normalizeEscapes(text));
+      s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+      s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+      s = s.replace(/\n/g, '<br>');
+      return s;
+    }}
+    function setProgress(percent) {{
+      const bar = $('bar');
+      if (!bar) return;
+      bar.style.width = `${{Math.max(0, Math.min(100, Number(percent) || 0))}}%`;
+    }}
+    function normalizeChapterTitle(raw, chapterIdx) {{
+      let t = String(raw || '').trim().replace(/^#+\s+/, '');
+      t = t.replace(/^章节\s*[Xx](?:\s*[.．]\s*[Yy])?\s*[：:]+\s*/u, '');
+      t = t.replace(/^chapter\s*[Xx](?:\s*[.．]\s*[Yy])?\s*[:：]+\s*/iu, '');
+      if (!t || t === '默认章节') return '';
+      return t;
+    }}
+    function normalizeChunkTitle(raw) {{
+      let t = String(raw || '').trim().replace(/^#+\s+/, '');
+      t = t.replace(/^chunk\s*[Xx](?:\s*[.．]\s*[Yy])?\s*[:：]+\s*/iu, '');
+      t = t.replace(/^chunk\s*\d+(?:\s*[.．]\s*\d+)?\s*[:：]+\s*/iu, '');
+      t = t.replace(/^章节\s*[Xx](?:\s*[.．]\s*[Yy])?\s*[：:]+\s*/u, '');
+      if (!t || t === '核心内容') return '';
+      return t;
+    }}
+    function isChunkRenderable(chunk) {{
+      if (!chunk) return false;
+      const title = normalizeChunkTitle(chunk.title || '');
+      const hasBody = !!(
+        (chunk.paragraphs || []).length ||
+        (chunk.bullets || []).length ||
+        (chunk.tables || []).length ||
+        (chunk.interactions || []).length ||
+        (chunk.codes || []).length
+      );
+      return !!title || hasBody;
+    }}
+    function isChapterRenderable(chapter, chapterIdx = 0) {{
+      if (!chapter) return false;
+      const chapterTitle = normalizeChapterTitle(chapter.title || '', chapterIdx);
+      const hasRenderableChunk = (chapter.chunks || []).some((ck) => isChunkRenderable(ck));
+      return !!chapterTitle || hasRenderableChunk;
+    }}
+    function firstRenderableChapterIndex() {{
+      for (let i = 0; i < MODEL.chapters.length; i += 1) {{
+        if (isChapterRenderable(MODEL.chapters[i], i)) return i;
+      }}
+      return 0;
+    }}
+    function deriveInteractionOutput(it) {{
+      const inputRaw = normalizeEscapes(String(it.input || '')).trim();
+      const outRaw = normalizeEscapes(String(it.output || '')).trim();
+      const titleRaw = String(it.title || '').toLowerCase();
+      if (!inputRaw && !outRaw) return '';
+      const looksTokenizer = titleRaw.includes('token') || titleRaw.includes('分词') || titleRaw.includes('tokenizer');
+      const outputLooksEcho = outRaw === inputRaw || outRaw.replace(/^原始文本[:：]\s*/, '').replace(/^["']|["']$/g, '') === inputRaw;
+      if (looksTokenizer && (outputLooksEcho || outRaw.startsWith('原始文本'))) {{
+        const tokens = inputRaw
+          .replace(/[.,!?;:()[\]{{}}"]/g, ' ')
+          .split(/\s+/)
+          .filter(Boolean);
+        if (!tokens.length) return outRaw || inputRaw;
+        const indexed = tokens.map((t, i) => `${{i + 1}}. ${{t}}`);
+        return `Token Count: ${{tokens.length}}\\n\\n${{indexed.join('\\n')}}`;
+      }}
+      const looksPlaceholder =
+        !outRaw ||
+        outRaw === '|' ||
+        outRaw === '...' ||
+        outRaw.includes('示例输出暂缺') ||
+        outRaw.includes('待补充');
+      if (looksPlaceholder) {{
+        if (titleRaw.includes('prompt')) {{
+          return [
+            'System: 你是一个严谨的技术讲解助手。',
+            'Task: 解释什么是结构化 Prompt，并给出一个工程可用模板。',
+            '',
+            '结构化模板:',
+            '1) Role: 定义角色与能力边界',
+            '2) Goal: 明确最终产出',
+            '3) Constraints: 长度/风格/禁止项',
+            '4) Context: 提供必要背景和输入',
+            '5) Output Format: 指定 JSON/表格/段落格式',
+            '',
+            '示例产出:',
+            '- definition: 结构化 Prompt 是把任务拆成可约束字段的提示方式。',
+            '- benefit: 输出更稳定 / 更易评估 / 可复用到流水线',
+          ].join('\\n');
+        }}
+        return inputRaw ? `已根据输入生成示例结果:\\n${{inputRaw}}` : '示例已运行：请在理解层补充更具体的 interaction.output。';
+      }}
+      return outRaw || inputRaw;
+    }}
+    function renderNav() {{
+      const nav = $('chapterNav');
+      nav.innerHTML = '';
+      MODEL.chapters.forEach((chapter, i) => {{
+        if (!isChapterRenderable(chapter, i)) return;
+        const chapterTitle = normalizeChapterTitle(chapter.title || '', i);
+        const firstChunkTitle = normalizeChunkTitle((((chapter.chunks || [])[0] || {{}}).title || ''));
+        const navLabel = chapterTitle || firstChunkTitle || `Section ${{i + 1}}`;
+        const group = document.createElement('div');
+        group.className = 'chapter-group';
+
+        const chapterBtn = document.createElement('button');
+        chapterBtn.className = 'chapter-item' + (i === state.chapterIdx ? ' active' : '');
+        chapterBtn.textContent = navLabel;
+        chapterBtn.onclick = () => {{
+          if ((String(RENDER_CONFIG.layout_mode || 'continuous').toLowerCase()) === 'continuous') {{
+            const anchor = document.getElementById(`chapter-${{i}}`);
+            if (anchor) anchor.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+            return;
+          }}
+          state.chapterIdx = i; state.chunkIdx = 0; render();
+        }};
+        group.appendChild(chapterBtn);
+
+        const chunkList = document.createElement('div');
+        chunkList.className = 'chunk-nav-list';
+        (chapter.chunks || []).forEach((chunk, ki) => {{
+          if (!isChunkRenderable(chunk)) return;
+          const title = normalizeChunkTitle(chunk.title || '') || `Chunk ${{i + 1}}.${{ki + 1}}`;
+          const cbtn = document.createElement('button');
+          cbtn.className = 'chunk-nav-item' + (i === state.chapterIdx && ki === state.chunkIdx ? ' active' : '');
+          cbtn.textContent = title;
+          cbtn.onclick = () => {{
+            if ((String(RENDER_CONFIG.layout_mode || 'continuous').toLowerCase()) === 'continuous') {{
+              const anchor = document.getElementById(`chunk-${{i}}-${{ki}}`);
+              if (anchor) anchor.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+              return;
+            }}
+            state.chapterIdx = i;
+            state.chunkIdx = ki;
+            render();
+          }};
+          chunkList.appendChild(cbtn);
+        }});
+        if (chunkList.childElementCount > 0) group.appendChild(chunkList);
+        nav.appendChild(group);
+      }});
+    }}
+    function buildTables(tables) {{
+      return (tables || []).map((tb) => {{
+        const head = (tb.header || []).map((x) => `<th>${{inlineMd(x)}}</th>`).join('');
+        const body = (tb.rows || []).map((row) => `<tr>${{row.map((c) => `<td>${{inlineMd(c)}}</td>`).join('')}}</tr>`).join('');
+        return `<h4>方案对比</h4><table><thead><tr>${{head}}</tr></thead><tbody>${{body}}</tbody></table>`;
+      }}).join('');
+    }}
+    function buildInteractions(items, chapterIdx = state.chapterIdx, chunkIdx = state.chunkIdx) {{
+      return (items || []).map((it, idx) => {{
+        const t = inlineMd(it.title || `交互示例 ${{idx + 1}}`);
+        const input = inlineMd(it.input || '固定输入');
+        const rawOut = deriveInteractionOutput(it);
+        const safeOut = rawOut && rawOut !== '|' && rawOut !== '...' ? rawOut : '示例输出暂缺，请在提示词中补充 interaction.output 的具体内容。';
+        const out = inlineMd(safeOut);
+        const btn = esc(it.button || '运行');
+        const id = `demo_${{chapterIdx}}_${{chunkIdx}}_${{idx}}`;
+        return `<div class='interaction'><strong>${{t}}</strong><p><b>输入:</b> ${{input}}</p><button onclick="showOut('${{id}}')">${{btn}}</button><pre id='${{id}}'>${{out}}</pre></div>`;
+      }}).join('');
+    }}
+    function chunkPlainText(chunk) {{
+      const parts = [];
+      (chunk.paragraphs || []).forEach((p) => parts.push(String(p || '').trim()));
+      if ((chunk.bullets || []).length) {{
+        (chunk.bullets || []).forEach((b) => parts.push(`- ${{String(b || '').trim()}}`));
+      }}
+      if ((chunk.tables || []).length) {{
+        (chunk.tables || []).forEach((t) => {{
+          const head = (t.header || []).join(' | ');
+          const rows = (t.rows || []).map((r) => r.join(' | ')).join('\\n');
+          const tableText = [head, rows].filter(Boolean).join('\\n');
+          if (tableText) parts.push(tableText);
+        }});
+      }}
+      if ((chunk.codes || []).length) {{
+        (chunk.codes || []).forEach((c) => parts.push(String(c || '').trim()));
+      }}
+      return parts.filter(Boolean).join('\\n');
+    }}
+    function isChunkSelected(key) {{
+      return chatState.selectedChunks.some((x) => x.key === key);
+    }}
+    function applyChunkSelectionUI() {{
+      document.querySelectorAll('.chunk-add-btn[data-chunk-key]').forEach((btn) => {{
+        const key = btn.getAttribute('data-chunk-key') || '';
+        const selected = isChunkSelected(key);
+        btn.classList.toggle('selected', selected);
+        btn.textContent = selected ? '✓' : '+';
+        btn.setAttribute('aria-label', selected ? '已加入聊天' : '加入聊天');
+        btn.setAttribute('title', selected ? '已加入聊天' : '加入聊天');
+      }});
+      document.querySelectorAll('.chunk-card[id^=\"chunk-\"]').forEach((card) => {{
+        const id = card.getAttribute('id') || '';
+        const m = id.match(/^chunk-(\d+)-(\d+)$/);
+        if (!m) return;
+        const key = `${{m[1]}}-${{m[2]}}`;
+        card.classList.toggle('is-selected', isChunkSelected(key));
+      }});
+      const singleCard = $('chunkCard');
+      if (singleCard && singleCard.style.display !== 'none') {{
+        const key = `${{state.chapterIdx}}-${{state.chunkIdx}}`;
+        singleCard.classList.toggle('is-selected', isChunkSelected(key));
+      }}
+    }}
+    function flashChunkCard(chapterIdx, chunkIdx) {{
+      const card = document.getElementById(`chunk-${{chapterIdx}}-${{chunkIdx}}`) || $('chunkCard');
+      if (!card) return;
+      card.classList.add('flash-added');
+      setTimeout(() => card.classList.remove('flash-added'), 920);
+    }}
+    function addChunkToChat(chapterIdx, chunkIdx) {{
+      const chapter = MODEL.chapters[chapterIdx];
+      if (!chapter) return;
+      const chunk = (chapter.chunks || [])[chunkIdx];
+      if (!chunk) return;
+      const key = `${{chapterIdx}}-${{chunkIdx}}`;
+      if (chatState.selectedChunks.some((x) => x.key === key)) return;
+      const label = `Chapter ${{chapterIdx + 1}} · Chunk ${{chunkIdx + 1}}`;
+      const title = normalizeChunkTitle(chunk.title || '');
+      const content = [title, chunkPlainText(chunk)].filter(Boolean).join('\\n');
+      chatState.selectedChunks.push({{ key, label, content }});
+      renderSelectedChunks();
+      applyChunkSelectionUI();
+      flashChunkCard(chapterIdx, chunkIdx);
+    }}
+    function removeSelectedChunk(key) {{
+      chatState.selectedChunks = chatState.selectedChunks.filter((x) => x.key !== key);
+      renderSelectedChunks();
+      applyChunkSelectionUI();
+    }}
+    function renderSelectedChunks() {{
+      const tray = $('chatSelected');
+      if (!tray) return;
+      if (!chatState.selectedChunks.length) {{
+        tray.classList.remove('has-items');
+        tray.innerHTML = '';
+        tray.style.height = '0px';
+        return;
+      }}
+      const cardH = 34;
+      const peek = 12;
+      const n = chatState.selectedChunks.length;
+      tray.classList.add('has-items');
+      tray.style.setProperty('--stack-card-h', `${{cardH}}px`);
+      tray.style.setProperty('--stack-peek', `${{peek}}px`);
+      tray.style.height = `${{cardH + (n > 1 ? n * peek : 0)}}px`;
+      tray.innerHTML = chatState.selectedChunks.map((x, idx) => (
+        `<div class='chat-selected-row' style='--stack-index:${{idx === 0 ? 0 : idx + 1}};'><span>${{esc(x.label)}}</span><button class='chat-selected-remove' type='button' onclick=\"removeSelectedChunk('${{esc(x.key)}}')\" title='取消加入'>×</button></div>`
+      )).join('');
+    }}
+    function renderCard() {{
+      const chapter = MODEL.chapters[state.chapterIdx];
+      const chunk = chapter.chunks[state.chunkIdx] || {{ title:'', paragraphs:[], bullets:[], tables:[], interactions:[] }};
+      const paras = (chunk.paragraphs || []).map((p) => `<p>${{inlineMd(p.replace(/^#+\s+/, ''))}}</p>`).join('');
+      const bullets = (chunk.bullets || []).length ? `<h4>关键要点</h4><ul>${{chunk.bullets.map((x) => `<li>${{inlineMd(x)}}</li>`).join('')}}</ul>` : '';
+      const tables = buildTables(chunk.tables);
+      const inter = buildInteractions(chunk.interactions, state.chapterIdx, state.chunkIdx);
+      const codes = (chunk.codes || []).map((c) => `<h4>代码片段</h4><pre>${{esc(c)}}</pre>`).join('');
+      const cleanTitle = normalizeChunkTitle(chunk.title || '');
+      const chapterTitle = normalizeChapterTitle(chapter.title || '', state.chapterIdx);
+      const showChapterHead = !!chapterTitle;
+      const showChunkTitle = !!cleanTitle;
+      const chapterHead = showChapterHead
+        ? `<div class='chapter-head'><h3 class='chapter-title'>${{inlineMd(chapterTitle)}}</h3></div>`
+        : '';
+      const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
+      const key = `${{state.chapterIdx}}-${{state.chunkIdx}}`;
+      const selected = isChunkSelected(key);
+      const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{state.chapterIdx}},${{state.chunkIdx}})' title='${{selected ? '已加入聊天' : '加入聊天'}}'>${{selected ? '✓' : '+'}}</button>`;
+      $('chunkCard').innerHTML = `${{addBtn}}${{chapterHead}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}`;
+      const percent = Math.round(((flatIndex(state.chapterIdx, state.chunkIdx) + 1) / flatCount()) * 100);
+      setProgress(percent);
+      $('prevBtn').disabled = state.chapterIdx === 0 && state.chunkIdx === 0;
+      $('nextBtn').textContent = percent === 100 ? '完成学习' : '下一块';
+    }}
+    function renderContinuous() {{
+      const flow = $('contentFlow');
+      const html = MODEL.chapters.map((chapter, ci) => {{
+        const chunksHtml = (chapter.chunks || []).map((chunk, ki) => {{
+          const paras = (chunk.paragraphs || []).map((p) => `<p>${{inlineMd(p.replace(/^#+\s+/, ''))}}</p>`).join('');
+          const bullets = (chunk.bullets || []).length ? `<h4>关键要点</h4><ul>${{chunk.bullets.map((x) => `<li>${{inlineMd(x)}}</li>`).join('')}}</ul>` : '';
+          const tables = buildTables(chunk.tables);
+          const inter = buildInteractions(chunk.interactions, ci, ki);
+          const codes = (chunk.codes || []).map((c) => `<h4>代码片段</h4><pre>${{esc(c)}}</pre>`).join('');
+          const cleanTitle = normalizeChunkTitle(chunk.title || '');
+          const hasBody = !!(paras || bullets || tables || inter || codes);
+          const showChunkTitle = !!cleanTitle;
+          if (!hasBody && !showChunkTitle) return '';
+          const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
+          const key = `${{ci}}-${{ki}}`;
+          const selected = isChunkSelected(key);
+          const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{ci}},${{ki}})' title='${{selected ? '已加入聊天' : '加入聊天'}}'>${{selected ? '✓' : '+'}}</button>`;
+          return `<article class='chunk-card' id='chunk-${{ci}}-${{ki}}'>${{addBtn}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}</article>`;
+        }}).join('');
+        const chapterTitle = normalizeChapterTitle(chapter.title || '', ci);
+        const showChapterHead = !!chapterTitle;
+        const chapterHead = showChapterHead
+          ? `<div class='chapter-head'><h2 class='chapter-title'>${{inlineMd(chapterTitle)}}</h2></div>`
+          : '';
+        if (!chunksHtml && !chapterHead) return '';
+        return `<section class='chapter-block' id='chapter-${{ci}}'>${{chapterHead}}${{chunksHtml}}</section>`;
+      }}).join('');
+      flow.innerHTML = html || `<section class='chapter-block' id='chapter-0'><article class='chunk-card'><p>暂无可展示内容，请先生成理解层知识文档。</p></article></section>`;
+      setProgress(100);
+    }}
+    function go(step) {{
+      let ci = state.chapterIdx;
+      let ki = state.chunkIdx + step;
+      while (ci >= 0 && ci < MODEL.chapters.length) {{
+        const len = MODEL.chapters[ci].chunks.length;
+        if (ki >= 0 && ki < len) {{ state.chapterIdx = ci; state.chunkIdx = ki; render(); return; }}
+        if (ki >= len) {{ ci += 1; ki = 0; continue; }}
+        if (ki < 0) {{ ci -= 1; if (ci >= 0) ki = MODEL.chapters[ci].chunks.length - 1; }}
+      }}
+    }}
+    function render() {{
+      if (!isChapterRenderable(MODEL.chapters[state.chapterIdx], state.chapterIdx)) {{
+        state.chapterIdx = firstRenderableChapterIndex();
+        state.chunkIdx = 0;
+      }}
+      $('courseTitle').textContent = MODEL.title || 'Ariadne';
+      const showHero = String(RENDER_CONFIG.show_hero || 'true').toLowerCase() !== 'false';
+      $('heroSection').style.display = showHero ? 'block' : 'none';
+      const backPath = String(RENDER_CONFIG.back_home_path || '/').trim() || '/';
+      $('backHomeBtn').setAttribute('href', backPath);
+      const continuous = String(RENDER_CONFIG.layout_mode || 'continuous').toLowerCase() === 'continuous';
+      $('contentFlow').style.display = continuous ? 'block' : 'none';
+      $('chunkCard').style.display = continuous ? 'none' : 'block';
+      $('pagerNav').style.display = continuous ? 'none' : 'flex';
+      renderNav();
+      if (continuous) renderContinuous();
+      else renderCard();
+      applyChunkSelectionUI();
+    }}
+    function navToggleIcon(collapsed) {{
+      return collapsed
+        ? `<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3.5' y='4.5' width='17' height='15' rx='2.5'></rect><path d='M8.5 4.5v15'></path><path d='M11 12h5'></path><path d='M14 9l3 3-3 3'></path></svg>`
+        : `<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3.5' y='4.5' width='17' height='15' rx='2.5'></rect><path d='M8.5 4.5v15'></path><path d='M16 12h-5'></path><path d='M13 9l-3 3 3 3'></path></svg>`;
+    }}
+    function chatToggleIcon(collapsed) {{
+      return collapsed
+        ? `<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3.5' y='4.5' width='17' height='15' rx='2.5'></rect><path d='M15.5 4.5v15'></path><path d='M13 12h-5'></path><path d='M10 9l-3 3 3 3'></path></svg>`
+        : `<svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3.5' y='4.5' width='17' height='15' rx='2.5'></rect><path d='M15.5 4.5v15'></path><path d='M10 12h5'></path><path d='M13 9l3 3-3 3'></path></svg>`;
+    }}
+    function toggleChatPanel() {{
+      const collapsed = document.body.classList.toggle('chat-collapsed');
+      const btn = $('chatToggleBtn');
+      if (!btn) return;
+      btn.innerHTML = chatToggleIcon(collapsed);
+      btn.setAttribute('aria-label', collapsed ? '展开聊天栏' : '收起聊天栏');
+      btn.setAttribute('title', collapsed ? '展开聊天栏' : '收起聊天栏');
+      btn.setAttribute('data-tip', collapsed ? '展开聊天栏' : '收起聊天栏');
+    }}
+    function isInspectorUI(el) {{
+      return !!(el && el.closest && el.closest('[data-inspector-ui="1"]'));
+    }}
+    function clearHover() {{
+      if (inspectState.hoverEl) {{
+        inspectState.hoverEl.classList.remove('inspect-target');
+        inspectState.hoverEl = null;
+      }}
+    }}
+    function cssPath(el) {{
+      if (!el || el.nodeType !== 1) return '';
+      const parts = [];
+      let node = el;
+      while (node && node.nodeType === 1 && node !== document.body) {{
+        let part = node.tagName.toLowerCase();
+        if (node.id) {{
+          part += `#${{node.id}}`;
+          parts.unshift(part);
+          break;
+        }}
+        const cls = (node.className || '').toString().trim().split(/\\s+/).filter(Boolean).filter((x) => x !== 'inspect-target').slice(0, 2);
+        if (cls.length) part += `.${{cls.join('.')}}`;
+        const parent = node.parentElement;
+        if (parent) {{
+          const siblings = [...parent.children].filter((x) => x.tagName === node.tagName);
+          if (siblings.length > 1) part += `:nth-of-type(${{siblings.indexOf(node) + 1}})`;
+        }}
+        parts.unshift(part);
+        node = node.parentElement;
+      }}
+      return parts.join(' > ');
+    }}
+    function xpath(el) {{
+      if (!el || el.nodeType !== 1) return '';
+      if (el.id) return `//*[@id="${{el.id}}"]`;
+      const parts = [];
+      let node = el;
+      while (node && node.nodeType === 1) {{
+        let index = 1;
+        let sib = node.previousElementSibling;
+        while (sib) {{
+          if (sib.tagName === node.tagName) index += 1;
+          sib = sib.previousElementSibling;
+        }}
+        parts.unshift(`${{node.tagName.toLowerCase()}}[${{index}}]`);
+        node = node.parentElement;
+        if (node === document.body) {{
+          parts.unshift('body[1]');
+          break;
+        }}
+      }}
+      return '/' + parts.join('/');
+    }}
+    function collectElementMeta(el) {{
+      const rect = el.getBoundingClientRect();
+      const cls = (el.className || '').toString().split(/\\s+/).filter((x) => x && x !== 'inspect-target').join(' ');
+      const text = (el.innerText || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 220);
+      const htmlSnippet = (el.outerHTML || '').replace(/\s+/g, ' ').replace(' inspect-target', '').slice(0, 260);
+      return {{
+        page_url: window.location.href,
+        css_selector: cssPath(el),
+        xpath: xpath(el),
+        tag: el.tagName.toLowerCase(),
+        id: el.id || '',
+        class_name: cls,
+        bounding_box: {{
+          x: Number((rect.left + window.scrollX).toFixed(2)),
+          y: Number((rect.top + window.scrollY).toFixed(2)),
+          width: Number(rect.width.toFixed(2)),
+          height: Number(rect.height.toFixed(2)),
+        }},
+        text_excerpt: text,
+        html_excerpt: htmlSnippet,
+      }};
+    }}
+    function startInspectMode() {{
+      inspectState.active = true;
+      $('inspectorFab').classList.add('active');
+      $('inspectorHint').style.display = 'block';
+      document.body.style.cursor = 'crosshair';
+    }}
+    function stopInspectMode() {{
+      inspectState.active = false;
+      $('inspectorFab').classList.remove('active');
+      $('inspectorHint').style.display = 'none';
+      document.body.style.cursor = '';
+      clearHover();
+    }}
+    function openInspectorModal(meta) {{
+      $('inspectorTargetInfo').textContent = JSON.stringify(meta, null, 2);
+      $('inspectorModalMask').style.display = 'flex';
+      $('inspectorNote').focus();
+    }}
+    function closeInspectorModal() {{
+      $('inspectorModalMask').style.display = 'none';
+      $('inspectorNote').value = '';
+    }}
+    async function copyInspectorPayload() {{
+      if (!inspectState.selectedMeta) return;
+      const payload = {{
+        target: inspectState.selectedMeta,
+        instruction: $('inspectorNote').value,
+        goal: '请只修改目标元素或其必要父容器，优先使用 CSS 调整；如需结构调整，保持其他区域不变。',
+      }};
+      const text = JSON.stringify(payload, null, 2);
+      try {{
+        await navigator.clipboard.writeText(text);
+      }} catch (e) {{
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }}
+    }}
+    function showOut(id) {{
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = 'block';
+    }}
+    window.addChunkToChat = addChunkToChat;
+    window.removeSelectedChunk = removeSelectedChunk;
+    function autoGrowChatInput() {{
+      const box = $('chatInput');
+      if (!box) return;
+      const minH = parseFloat(getComputedStyle(box).minHeight) || 66;
+      const maxH = minH * 2;
+      box.style.height = 'auto';
+      const h = Math.max(minH, Math.min(box.scrollHeight, maxH));
+      box.style.height = `${{h}}px`;
+      box.style.overflowY = box.scrollHeight > maxH ? 'auto' : 'hidden';
+    }}
+    window.showOut = showOut;
+    $('inspectorFab').onclick = () => {{
+      if (inspectState.active) stopInspectMode();
+      else startInspectMode();
+    }};
+    $('inspectorCloseBtn').onclick = () => {{
+      closeInspectorModal();
+      stopInspectMode();
+    }};
+    $('inspectorCopyBtn').onclick = copyInspectorPayload;
+    $('navToggleBtn').onclick = () => {{
+      const layout = document.querySelector('.layout');
+      const nav = document.querySelector('.nav');
+      const enable = String(RENDER_CONFIG.nav_collapsible || 'true').toLowerCase() !== 'false';
+      if (!enable || !layout || !nav) return;
+      const collapsed = layout.classList.toggle('nav-collapsed');
+      nav.classList.toggle('collapsed', collapsed);
+      $('navToggleBtn').innerHTML = navToggleIcon(collapsed);
+      $('navToggleBtn').setAttribute('data-tip', collapsed ? '展开导航' : '收起导航');
+    }};
+    $('navToggleBtn').innerHTML = navToggleIcon(false);
+    $('navToggleBtn').setAttribute('data-tip', '收起导航');
+    $('chatToggleBtn').onclick = toggleChatPanel;
+    $('chatToggleBtn').innerHTML = chatToggleIcon(false);
+    $('chatToggleBtn').setAttribute('data-tip', '收起聊天栏');
+    $('prevBtn').onclick = () => go(-1);
+    $('nextBtn').onclick = () => go(1);
+    $('chatSendBtn').onclick = sendChatMessage;
+    $('chatInput').addEventListener('keydown', (e) => {{
+      if (e.key === 'Enter' && !e.shiftKey) {{
+        e.preventDefault();
+        sendChatMessage();
+      }}
+    }});
+    $('chatInput').addEventListener('input', autoGrowChatInput);
+    document.querySelectorAll('.chat-tool').forEach((el) => {{
+      el.addEventListener('click', () => {{
+        const q = el.getAttribute('data-q') || '';
+        if (!q) return;
+        const box = $('chatInput');
+        if (box) {{
+          box.value = q;
+          box.focus();
+          autoGrowChatInput();
+        }}
+      }});
+    }});
+    const chatUploadBtn = $('chatUploadBtn');
+    const chatUploadInput = $('chatUploadInput');
+    if (chatUploadBtn && chatUploadInput) {{
+      chatUploadBtn.addEventListener('click', () => chatUploadInput.click());
+      chatUploadInput.addEventListener('change', async () => {{
+        const f = chatUploadInput.files && chatUploadInput.files[0];
+        await uploadChatFile(f);
+        chatUploadInput.value = '';
+      }});
+    }}
+    autoGrowChatInput();
+    document.addEventListener('mousemove', (e) => {{
+      if (!inspectState.active) return;
+      const el = e.target;
+      if (!(el instanceof Element)) return;
+      if (isInspectorUI(el)) {{
+        clearHover();
+        return;
+      }}
+      if (inspectState.hoverEl !== el) {{
+        clearHover();
+        inspectState.hoverEl = el;
+        inspectState.hoverEl.classList.add('inspect-target');
+      }}
+    }}, true);
+    document.addEventListener('click', (e) => {{
+      if (!inspectState.active) return;
+      const el = e.target;
+      if (!(el instanceof Element)) return;
+      if (isInspectorUI(el)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      inspectState.selectedMeta = collectElementMeta(el);
+      openInspectorModal(inspectState.selectedMeta);
+      stopInspectMode();
+    }}, true);
+    try {{
+      render();
+    }} catch (err) {{
+      showContentFallback(err && err.message ? err.message : String(err));
+    }}
+  </script>
+</body>
+</html>"""

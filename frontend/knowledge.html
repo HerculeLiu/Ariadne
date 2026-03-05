@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ariadne Knowledge</title>
+  <style>
+    :root {
+      --bg-1: #f8f5ee;
+      --bg-2: #ece5d7;
+      --panel: #fcfaf4;
+      --line: #d4cdc0;
+      --text: #172127;
+      --muted: #59646d;
+      --accent: #2f5d4c;
+      --accent-2: #3f7661;
+      --shadow: 0 12px 30px rgba(48, 42, 30, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      font: 14px/1.6 "Avenir Next", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      background:
+        radial-gradient(900px 420px at -10% -10%, rgba(78, 122, 105, 0.18), transparent 60%),
+        radial-gradient(900px 420px at 110% -10%, rgba(189, 123, 74, 0.14), transparent 60%),
+        linear-gradient(160deg, var(--bg-1), var(--bg-2));
+      overflow: hidden;
+    }
+
+    .layout {
+      position: fixed;
+      inset: 0;
+    }
+
+    .nav {
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 270px;
+      padding: 14px 10px;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #fffdf8, #f7f2e7);
+      box-shadow: 10px 0 26px rgba(48, 42, 30, 0.12);
+      overflow: auto;
+      z-index: 20;
+    }
+
+    .brand {
+      font-weight: 700;
+      letter-spacing: .2px;
+      margin: 0 2px 12px;
+      color: var(--text);
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fffdf8;
+      padding: 10px;
+      margin-bottom: 8px;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      word-break: break-all;
+      margin-top: 6px;
+    }
+
+    .btn {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 8px;
+      text-align: left;
+    }
+
+    .btn:hover { border-color: #bfb39d; }
+
+    .btn.primary {
+      border-color: transparent;
+      color: #f8f4ea;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+
+    .main {
+      position: fixed;
+      left: 286px;
+      right: 396px;
+      top: 12px;
+      bottom: 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fcf8ef, #f6efe2);
+      box-shadow: inset 0 0 0 1px rgba(212, 205, 192, 0.8);
+      overflow: hidden;
+      z-index: 10;
+    }
+
+    .main-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      background: #fffdf8;
+    }
+
+    .title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: 12px;
+      min-height: 18px;
+    }
+
+    .status.warn { color: #8a4f2b; }
+
+    .viewer {
+      width: 100%;
+      height: calc(100% - 58px);
+      border: none;
+      background: #fff;
+    }
+
+    .chat-side {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 380px;
+      border-left: 1px solid var(--line);
+      background: #f9f4ea;
+      box-shadow: -10px 0 28px rgba(48, 42, 30, 0.12);
+      display: flex;
+      flex-direction: column;
+      z-index: 20;
+    }
+
+    .chat-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background:
+        radial-gradient(420px 120px at 15% -30%, rgba(78, 122, 105, 0.18), transparent 70%),
+        radial-gradient(380px 120px at 90% -20%, rgba(189, 123, 74, 0.14), transparent 72%),
+        #fffdf8;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .chat-title { font-size: 15px; font-weight: 700; color: #243138; }
+    .chat-sub { margin-top: 2px; font-size: 11px; color: #6a737b; }
+
+    .chat-head-right {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .chat-icon-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--muted);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all 0.15s ease;
+    }
+
+    .chat-icon-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .chat-icon-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .chat-icon-btn.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .chat-history-panel {
+      border-bottom: 1px solid var(--line);
+      background: #f7f2e7;
+      max-height: 200px;
+      overflow: hidden;
+      display: none;
+    }
+
+    .chat-history-panel.open {
+      display: block;
+    }
+
+    .chat-history-list {
+      padding: 8px;
+      overflow-y: auto;
+      max-height: 200px;
+    }
+
+    .history-item {
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      transition: background 0.15s ease;
+    }
+
+    .history-item:hover {
+      background: rgba(47, 93, 76, 0.08);
+    }
+
+    .history-item.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .history-item-title {
+      flex: 1;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-item-time {
+      font-size: 11px;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }
+
+    .history-empty {
+      padding: 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .new-chat-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 8px;
+      height: 8px;
+      background: #e74c3c;
+      border-radius: 50%;
+      display: none;
+    }
+
+    .new-chat-badge.show { display: block; }
+
+    .chat-list {
+      flex: 1;
+      overflow: auto;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: linear-gradient(180deg, #f9f4ea, #f4ecdf);
+    }
+
+    .msg {
+      max-width: 92%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #fff;
+      color: #2e3941;
+      white-space: pre-wrap;
+      word-break: break-word;
+      box-shadow: 0 4px 14px rgba(48, 42, 30, 0.08);
+    }
+
+    .msg.user {
+      align-self: flex-end;
+      background: #eef4f0;
+      border-color: #b6c9bf;
+      color: #1f4b3d;
+    }
+
+    .msg.system-tip {
+      align-self: center;
+      background: #fff9e6;
+      border-color: #e0c896;
+      color: #7a5c2e;
+      font-size: 12px;
+      text-align: center;
+      max-width: 95%;
+    }
+
+    .chat-input {
+      border-top: 1px solid var(--line);
+      background: #fffdf8;
+      padding: 8px 10px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .chat-input textarea {
+      min-height: 64px;
+      max-height: 132px;
+      resize: none;
+      border: 1px solid #d9ccb8;
+      border-radius: 10px;
+      padding: 8px 9px;
+      font: inherit;
+      color: #2e3941;
+      background: #fff;
+    }
+
+    .chat-input textarea:focus {
+      outline: none;
+      border-color: #9cb5aa;
+      box-shadow: 0 0 0 3px rgba(78, 122, 105, 0.14);
+    }
+
+    .send {
+      min-width: 82px;
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    @media (max-width: 820px) {
+      .nav { width: 220px; }
+      .main { left: 236px; }
+      .chat-side { width: 300px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="nav">
+      <div class="brand">Ariadne Shell</div>
+      <div class="card">
+        <div>当前页面</div>
+        <div class="meta" id="meta">courseware_id=</div>
+      </div>
+      <button id="backBtn" class="btn" type="button">返回首页</button>
+      <button id="refreshBtn" class="btn primary" type="button">刷新内容</button>
+      <button id="openTabBtn" class="btn" type="button">新标签页打开</button>
+      <div class="card" style="margin-top:10px;">
+        <div style="font-size:12px;color:var(--muted)">固定壳层说明</div>
+        <div class="meta">左导航与右侧聊天栏属于项目固定壳层；中间区域根据课件内容动态渲染。</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="main-head">
+        <h1 class="title">Interactive Knowledge</h1>
+        <div id="status" class="status">正在加载...</div>
+      </div>
+      <iframe id="viewer" class="viewer" title="Knowledge HTML Viewer"></iframe>
+    </main>
+
+    <aside class="chat-side">
+      <div class="chat-head">
+        <div>
+          <div class="chat-title">Chat</div>
+          <div class="chat-sub">自动关联文档内容进行对话</div>
+        </div>
+        <div class="chat-head-right">
+          <button id="newChatBtn" class="chat-icon-btn" title="新建对话" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+          </button>
+          <button id="historyToggleBtn" class="chat-icon-btn" title="聊天历史" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 8v4l3 3"/>
+              <circle cx="12" cy="12" r="9"/>
+            </svg>
+            <span class="new-chat-badge" id="newChatBadge"></span>
+          </button>
+        </div>
+      </div>
+
+      <div id="historyPanel" class="chat-history-panel">
+        <div id="historyList" class="chat-history-list">
+          <div class="history-empty">暂无历史对话</div>
+        </div>
+      </div>
+
+      <div id="chatList" class="chat-list">
+        <div class="msg">Hi, I am ready. Ask me anything.</div>
+        <div class="msg system-tip">我会自动将中间文档的内容加入上下文，你可以直接针对文档内容提问。</div>
+      </div>
+      <div class="chat-input">
+        <textarea id="chatInput" placeholder="针对文档内容提问..."></textarea>
+        <button id="chatSendBtn" class="send" type="button">Send</button>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const chatState = { sessionId: '', sending: false, sessions: [], historyOpen: false };
+
+    function getCoursewareId() {
+      return new URLSearchParams(location.search).get('courseware_id') || '';
+    }
+
+    async function apiJson(path, options = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      return res.json();
+    }
+
+    function formatTime(isoString) {
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      const now = new Date();
+      const diff = now - date;
+      if (diff < 60000) return '刚刚';
+      if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+      return (date.getMonth() + 1) + '/' + date.getDate();
+    }
+
+    function appendChat(role, text) {
+      const row = document.createElement('div');
+      row.className = role === 'user' ? 'msg user' : 'msg';
+      row.textContent = text;
+      const list = $('chatList');
+      list.appendChild(row);
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function clearChatList() {
+      $('chatList').innerHTML = '<div class="msg">Hi, I am ready. Ask me anything.</div><div class="msg system-tip">我会自动将中间文档的内容加入上下文，你可以直接针对文档内容提问。</div>';
+    }
+
+    async function loadChatSessions() {
+      const coursewareId = getCoursewareId();
+      if (!coursewareId) return;
+
+      const data = await apiJson(`/api/v1/chat/sessions?courseware_id=${encodeURIComponent(coursewareId)}`);
+      if (data.code === 0 && data.data && data.data.sessions) {
+        chatState.sessions = data.data.sessions;
+        renderHistoryList();
+      }
+    }
+
+    function renderHistoryList() {
+      const list = $('historyList');
+      if (chatState.sessions.length === 0) {
+        list.innerHTML = '<div class="history-empty">暂无历史对话</div>';
+        return;
+      }
+
+      list.innerHTML = chatState.sessions.map(s => `
+        <div class="history-item ${s.id === chatState.sessionId ? 'active' : ''}" data-id="${s.id}">
+          <div class="history-item-title">${s.title || '新对话'}</div>
+          <div class="history-item-time">${formatTime(s.last_active_at || s.created_at)}</div>
+        </div>
+      `).join('');
+
+      list.querySelectorAll('.history-item').forEach(item => {
+        item.addEventListener('click', () => {
+          const sessionId = item.dataset.id;
+          switchSession(sessionId);
+        });
+      });
+    }
+
+    function toggleHistoryPanel() {
+      chatState.historyOpen = !chatState.historyOpen;
+      $('historyPanel').classList.toggle('open', chatState.historyOpen);
+      $('historyToggleBtn').classList.toggle('active', chatState.historyOpen);
+      if (chatState.historyOpen) {
+        loadChatSessions();
+      }
+    }
+
+    async function createNewChat() {
+      const coursewareId = getCoursewareId();
+      if (!coursewareId) return;
+
+      const data = await apiJson('/api/v1/chat/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          courseware_id: coursewareId,
+          page_id: 'pg_knowledge_shell',
+          chunk_id: '',
+        }),
+      });
+
+      if (data.code === 0 && data.data && data.data.id) {
+        chatState.sessionId = data.data.id;
+        clearChatList();
+        if (chatState.historyOpen) {
+          loadChatSessions();
+        }
+      }
+    }
+
+    async function switchSession(sessionId) {
+      chatState.sessionId = sessionId;
+      const data = await apiJson(`/api/v1/chat/sessions`, {
+        method: 'POST',
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+
+      if (data.code === 0 && data.data && data.data.messages) {
+        $('chatList').innerHTML = '';
+        data.data.messages.forEach(msg => {
+          appendChat(msg.role, msg.content);
+        });
+        renderHistoryList();
+      }
+    }
+
+    async function ensureChatSession() {
+      if (chatState.sessionId) return chatState.sessionId;
+      const coursewareId = getCoursewareId();
+      if (!coursewareId) throw new Error('missing courseware_id');
+      const data = await apiJson('/api/v1/chat/sessions', {
+        method: 'POST',
+        body: JSON.stringify({
+          courseware_id: coursewareId,
+          page_id: 'pg_knowledge_shell',
+          chunk_id: '',
+        }),
+      });
+      if (data.code !== 0 || !data.data || !data.data.id) {
+        throw new Error(data.message || 'chat session create failed');
+      }
+      chatState.sessionId = data.data.id;
+      return chatState.sessionId;
+    }
+
+    async function sendChat() {
+      if (chatState.sending) return;
+      const text = ($('chatInput').value || '').trim();
+      if (!text) return;
+      $('chatInput').value = '';
+      appendChat('user', text);
+      chatState.sending = true;
+      $('chatSendBtn').disabled = true;
+      try {
+        const sessionId = await ensureChatSession();
+        const data = await apiJson('/api/v1/chat/messages', {
+          method: 'POST',
+          body: JSON.stringify({ session_id: sessionId, message: text }),
+        });
+        if (data.code !== 0) {
+          appendChat('assistant', `Request failed: ${data.message || 'unknown error'}`);
+          return;
+        }
+        appendChat('assistant', (data.data && data.data.reply) || 'No response');
+      } catch (err) {
+        appendChat('assistant', `Request failed: ${err && err.message ? err.message : String(err)}`);
+      } finally {
+        chatState.sending = false;
+        $('chatSendBtn').disabled = false;
+      }
+    }
+
+    async function loadHtml() {
+      const id = getCoursewareId();
+      if (!id) {
+        $('status').classList.add('warn');
+        $('status').textContent = '缺少 courseware_id 参数';
+        return;
+      }
+
+      $('meta').textContent = `courseware_id=${id}`;
+      $('refreshBtn').disabled = true;
+      $('status').classList.remove('warn');
+      $('status').textContent = '正在生成并加载可交互 HTML...';
+
+      try {
+        const res = await fetch(`/api/v1/coursewares/${id}/html`);
+        const data = await res.json();
+        if (data.code !== 0) {
+          $('status').classList.add('warn');
+          $('status').textContent = `加载失败：${data.message}`;
+          return;
+        }
+        $('viewer').srcdoc = (data.data && data.data.html) || '';
+        $('status').textContent = '已加载，可直接在页面中交互学习。';
+      } catch (err) {
+        const msg = err && err.message ? err.message : String(err);
+        $('status').classList.add('warn');
+        $('status').textContent = `加载失败：${msg}`;
+      } finally {
+        $('refreshBtn').disabled = false;
+      }
+    }
+
+    $('backBtn').addEventListener('click', () => {
+      location.href = '/';
+    });
+
+    $('refreshBtn').addEventListener('click', loadHtml);
+
+    $('openTabBtn').addEventListener('click', () => {
+      const id = getCoursewareId();
+      if (!id) return;
+      window.open(`/downloads/${encodeURIComponent(id)}.html}`, '_blank');
+    });
+
+    $('chatSendBtn').addEventListener('click', sendChat);
+    $('chatInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChat();
+      }
+    });
+
+    $('newChatBtn').addEventListener('click', createNewChat);
+    $('historyToggleBtn').addEventListener('click', toggleHistoryPanel);
+
+    loadHtml();
+  </script>
+</body>
+</html>
