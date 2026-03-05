@@ -176,7 +176,6 @@
       background: linear-gradient(135deg, #2f5d4c, #3f7661);
       border-color: transparent;
       color: #f8f4ea;
-      text-indent: -3px;
     }}
     .chunk-card:before {{
       content:'';
@@ -320,9 +319,13 @@
         radial-gradient(420px 120px at 15% -30%, rgba(78,122,105,.18), transparent 70%),
         radial-gradient(380px 120px at 90% -20%, rgba(189,123,74,.14), transparent 72%),
         #fffdf8;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
     }}
     .chat-toggle {{
-      position:absolute; right:10px; top:10px;
+      position: static;
+      flex-shrink: 0;
       width:30px; height:30px; border:1px solid var(--line); background:#fffdf8;
       border-radius:8px; display:grid; place-items:center; cursor:pointer; color:#4f5e6b;
     }}
@@ -330,6 +333,93 @@
     .chat-toggle:hover {{ background:#f4ecdf; }}
     .chat-title {{ font-size: 16px; font-weight: 700; color: #243138; }}
     .chat-sub {{ margin-top: 2px; font-size: 12px; color: #6a737b; }}
+    .chat-head-content {{
+      flex: 1;
+    }}
+    .chat-head-right {{
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }}
+    .chat-icon-btn {{
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: #4f5e6b;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all 0.15s ease;
+    }}
+    .chat-icon-btn:hover {{
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f4ecdf;
+    }}
+    .chat-icon-btn svg {{
+      width: 14px;
+      height: 14px;
+    }}
+    .chat-icon-btn.active {{
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }}
+    .chat-history-panel {{
+      border-bottom: 1px solid var(--line);
+      background: #f7f2e7;
+      max-height: 200px;
+      overflow: hidden;
+      display: none;
+    }}
+    .chat-history-panel.open {{
+      display: block;
+    }}
+    .chat-history-list {{
+      padding: 8px;
+      overflow-y: auto;
+      max-height: 200px;
+    }}
+    .history-item {{
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+      transition: background 0.15s ease;
+      border: 1px solid transparent;
+    }}
+    .history-item:hover {{
+      background: rgba(47, 93, 76, 0.08);
+      border-color: rgba(47, 93, 76, 0.12);
+    }}
+    .history-item.active {{
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }}
+    .history-item-title {{
+      flex: 1;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }}
+    .history-item-time {{
+      font-size: 11px;
+      opacity: 0.7;
+      flex-shrink: 0;
+    }}
+    .history-empty {{
+      padding: 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }}
     .chat-list {{
       flex: 1; overflow: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px;
       background: linear-gradient(180deg,#f9f4ea,#f4ecdf);
@@ -339,8 +429,64 @@
       font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: #fff;
       box-shadow: 0 4px 14px rgba(48,42,30,.08);
     }}
-    .msg.user {{ align-self: flex-end; background: #eef4f0; border-color: #b6c9bf; color: #1f4b3d; }}
+    .msg.user-wrapper {{
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }}
+    .msg.user {{ align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; border: 1px solid var(--bg-1); }}
     .msg.assistant {{ align-self: flex-start; color: #2e3941; }}
+    .msg-refs {{
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      max-width: 280px;
+    }}
+    .msg-ref-card {{
+      display: flex;
+      flex-direction: column;
+      padding: 5px 8px;
+      border-radius: 6px;
+      background: #f7f2e7;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }}
+    .msg-ref-card:hover {{
+      background: #f0eadf;
+    }}
+    .msg-ref-title {{
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.3;
+    }}
+    .msg-ref-subtitle {{
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.2;
+    }}
+    .msg-user-text {{
+      padding: 6px 0;
+      color: #1f4b3d;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }}
+    .msg-user-text-inner {{
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #eef4f0;
+      border-color: #b6c9bf;
+      color: #1f4b3d;
+      word-break: break-word;
+      box-shadow: 0 4px 14px rgba(48,42,30,.08);
+      max-width: 280px;
+    }}
     .chat-tools {{
       display: flex; align-items: center; gap: 8px; padding: 8px 10px;
       border-top: 1px solid var(--line); background: #fffdf8;
@@ -442,8 +588,10 @@
     body.chat-collapsed .chat-sub,
     body.chat-collapsed .chat-list,
     body.chat-collapsed .chat-tools,
-    body.chat-collapsed .chat-input {{ display:none; }}
-    body.chat-collapsed .chat-toggle {{ left: 10px; right: auto; }}
+    body.chat-collapsed .chat-input,
+    body.chat-collapsed .chat-head-content,
+    body.chat-collapsed .chat-head-right,
+    body.chat-collapsed .chat-history-panel {{ display:none; }}
     @keyframes cardIn {{
       from {{ opacity:0; transform: translateY(8px); }}
       to {{ opacity:1; transform: translateY(0); }}
@@ -506,8 +654,28 @@
   <aside class='chat-side'>
     <div class='chat-head'>
       <button id='chatToggleBtn' class='chat-toggle' title='收起/展开聊天栏' aria-label='收起/展开聊天栏' data-tip='收起聊天栏'><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3.5' y='4.5' width='17' height='15' rx='2.5'></rect><path d='M15.5 4.5v15'></path><path d='M10 12h5'></path><path d='M13 9l3 3-3 3'></path></svg></button>
-      <div class='chat-title'>Chat</div>
-      <div class='chat-sub'>General conversation mode.</div>
+      <div class='chat-head-content'>
+        <div class='chat-title'>Chat</div>
+        <div class='chat-sub'>General conversation mode.</div>
+      </div>
+      <div class='chat-head-right'>
+        <button id='newChatBtn' class='chat-icon-btn' title='新建对话' type='button' data-tip='新建对话'>
+          <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+            <path d='M12 5v14M5 12h14'/>
+          </svg>
+        </button>
+        <button id='historyToggleBtn' class='chat-icon-btn' title='聊天历史' type='button' data-tip='聊天历史'>
+          <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+            <path d='M12 8v4l3 3'/>
+            <circle cx='12' cy='12' r='9'/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div id='historyPanel' class='chat-history-panel'>
+      <div id='historyList' class='chat-history-list'>
+        <div class='history-empty'>暂无历史对话</div>
+      </div>
     </div>
     <div id='chatList' class='chat-list'>
       <div class='msg assistant'>Hi, I am ready. Ask me anything.</div>
@@ -534,7 +702,7 @@
     const RENDER_CONFIG = {config_json};
     const state = {{ chapterIdx: 0, chunkIdx: 0 }};
     const inspectState = {{ active: false, hoverEl: null, selectedMeta: null }};
-    const chatState = {{ sessionId: '', sending: false, selectedChunks: [] }};
+    const chatState = {{ sessionId: '', sending: false, selectedChunks: [], historyOpen: false, sessions: [] }};
     const $ = (id) => document.getElementById(id);
     function showContentFallback(reason) {{
       const fallback = $('renderFallbackCard');
@@ -570,15 +738,66 @@
       const res = await fetch(path, {{ headers: {{ 'Content-Type': 'application/json' }}, ...options }});
       return res.json();
     }}
-    function appendChat(role, text) {{
+    function appendChat(role, text, chunks = []) {{
       const list = $('chatList');
       if (!list) return;
-      const row = document.createElement('div');
-      row.className = `msg ${{role}}`;
-      row.textContent = text;
-      list.appendChild(row);
+
+      if (role === 'user' && chunks.length > 0) {{
+        const outerWrapper = document.createElement('div');
+        outerWrapper.className = 'msg user-wrapper';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg user';
+
+        const chunksHtml = chunks.map((chunk) => {{
+          const match = chunk.label.match(/Chapter (\d+) · Chunk (\d+)/);
+          const location = match ? `Chapter ${{match[1]}}, Chunk ${{match[2]}}` : chunk.label;
+          const title = chunk.title || chunk.label;
+          return `
+          <div class='msg-ref-card' onclick='jumpToChunk("${{esc(chunk.key || '')}}")' title='点击跳转'>
+            <div class='msg-ref-title'>${{esc(title)}}</div>
+            <div class='msg-ref-subtitle'>${{esc(location)}}</div>
+          </div>
+          `;
+        }}).join('');
+
+        wrapper.innerHTML = `
+          <div class='msg-refs'>${{chunksHtml}}</div>
+          ${{text ? `<div class='msg-user-text-inner'>${{esc(text)}}</div>` : ''}}
+        `;
+        outerWrapper.appendChild(wrapper);
+        list.appendChild(outerWrapper);
+      }} else if (role === 'user') {{
+        const outerWrapper = document.createElement('div');
+        outerWrapper.className = 'msg user-wrapper';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg user';
+        wrapper.innerHTML = `<div class='msg-user-text-inner'>${{esc(text)}}</div>`;
+        outerWrapper.appendChild(wrapper);
+        list.appendChild(outerWrapper);
+      }} else {{
+        const row = document.createElement('div');
+        row.className = `msg ${{role}}`;
+        row.textContent = text;
+        list.appendChild(row);
+      }}
       list.scrollTop = list.scrollHeight;
     }}
+    function jumpToChunk(key) {{
+      if (!key) return;
+      const [chapterIdx, chunkIdx] = key.split('-').map(Number);
+      if (!isNaN(chapterIdx) && !isNaN(chunkIdx)) {{
+        state.chapterIdx = chapterIdx;
+        state.chunkIdx = chunkIdx;
+        render();
+        const continuous = String(RENDER_CONFIG.layout_mode || 'continuous').toLowerCase() === 'continuous';
+        if (continuous) {{
+          const anchor = document.getElementById(`chunk-${{chapterIdx}}-${{chunkIdx}}`);
+          if (anchor) anchor.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+        }}
+      }}
+    }}
+    window.jumpToChunk = jumpToChunk;
     async function ensureChatSession() {{
       if (chatState.sessionId) return chatState.sessionId;
       const payload = {{
@@ -596,21 +815,123 @@
       chatState.sessionId = data.data.id;
       return chatState.sessionId;
     }}
+    function formatTime(isoString) {{
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      const now = new Date();
+      const diff = now - date;
+      if (diff < 60000) return '刚刚';
+      if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+      return (date.getMonth() + 1) + '/' + date.getDate();
+    }}
+    function clearChatList() {{
+      const list = $('chatList');
+      if (!list) return;
+      list.innerHTML = '<div class="msg assistant">Hi, I am ready. Ask me anything.</div>';
+    }}
+    async function loadChatSessions() {{
+      if (!chatCoursewareId) return;
+      try {{
+        const data = await apiJson(`/api/v1/chat/sessions?courseware_id=${{encodeURIComponent(chatCoursewareId)}}`);
+        if (data.code === 0 && data.data && data.data.sessions) {{
+          chatState.sessions = data.data.sessions;
+          renderHistoryList();
+        }}
+      }} catch (err) {{
+        console.error('Failed to load chat sessions:', err);
+      }}
+    }}
+    function renderHistoryList() {{
+      const list = $('historyList');
+      if (!list) return;
+      if (chatState.sessions.length === 0) {{
+        list.innerHTML = '<div class="history-empty">暂无历史对话</div>';
+        return;
+      }}
+      list.innerHTML = chatState.sessions.map(s => `
+        <div class="history-item ${{s.id === chatState.sessionId ? 'active' : ''}}" data-id="${{s.id}}">
+          <div class="history-item-title">${{esc(s.title || '新对话')}}</div>
+          <div class="history-item-time">${{formatTime(s.last_active_at || s.created_at)}}</div>
+        </div>
+      `).join('');
+      list.querySelectorAll('.history-item').forEach(item => {{
+        item.addEventListener('click', () => {{
+          const sessionId = item.dataset.id;
+          switchSession(sessionId);
+        }});
+      }});
+    }}
+    function toggleHistoryPanel() {{
+      chatState.historyOpen = !chatState.historyOpen;
+      $('historyPanel').classList.toggle('open', chatState.historyOpen);
+      $('historyToggleBtn').classList.toggle('active', chatState.historyOpen);
+      if (chatState.historyOpen) {{
+        loadChatSessions();
+      }}
+    }}
+    async function createNewChat() {{
+      if (!chatCoursewareId) return;
+      try {{
+        const data = await apiJson('/api/v1/chat/sessions', {{
+          method: 'POST',
+          body: JSON.stringify({{
+            courseware_id: chatCoursewareId,
+            page_id: 'pg_generated',
+            chunk_id: '',
+          }}),
+        }});
+        if (data.code === 0 && data.data && data.data.id) {{
+          chatState.sessionId = data.data.id;
+          clearChatList();
+          if (chatState.historyOpen) {{
+            await loadChatSessions();
+          }}
+        }}
+      }} catch (err) {{
+        console.error('Failed to create new chat:', err);
+        appendChat('assistant', 'Failed to create new chat session');
+      }}
+    }}
+    async function switchSession(sessionId) {{
+      try {{
+        chatState.sessionId = sessionId;
+        const data = await apiJson('/api/v1/chat/sessions', {{
+          method: 'POST',
+          body: JSON.stringify({{ session_id: sessionId }}),
+        }});
+        if (data.code === 0 && data.data && data.data.messages) {{
+          const list = $('chatList');
+          if (!list) return;
+          list.innerHTML = '';
+          data.data.messages.forEach(msg => {{
+            appendChat(msg.role, msg.content);
+          }});
+          renderHistoryList();
+        }}
+      }} catch (err) {{
+        console.error('Failed to switch session:', err);
+        appendChat('assistant', 'Failed to load chat history');
+      }}
+    }}
     async function sendChatMessage() {{
       if (chatState.sending) return;
       const box = $('chatInput');
       const btn = $('chatSendBtn');
       const text = (box && box.value ? box.value : '').trim();
       if (!text && !chatState.selectedChunks.length) return;
-      const selectedPayload = chatState.selectedChunks
+
+      const chunksToUse = [...chatState.selectedChunks];
+
+      const selectedPayload = chunksToUse
         .map((x) => `[${{x.label}}]\\n${{x.content}}`)
         .join('\\n\\n');
       const message = [selectedPayload, text].filter(Boolean).join('\\n\\n');
-      appendChat('user', message);
+
+      appendChat('user', text, chunksToUse);
+
       if (box) box.value = '';
       autoGrowChatInput();
-      chatState.selectedChunks = [];
-      renderSelectedChunks();
       chatState.sending = true;
       if (btn) btn.disabled = true;
       try {{
@@ -865,9 +1186,9 @@
         const key = btn.getAttribute('data-chunk-key') || '';
         const selected = isChunkSelected(key);
         btn.classList.toggle('selected', selected);
-        btn.textContent = selected ? '✓' : '+';
-        btn.setAttribute('aria-label', selected ? '已加入聊天' : '加入聊天');
-        btn.setAttribute('title', selected ? '已加入聊天' : '加入聊天');
+        btn.textContent = selected ? '-' : '+';
+        btn.setAttribute('aria-label', selected ? '移出聊天' : '加入聊天');
+        btn.setAttribute('title', selected ? '移出聊天' : '加入聊天');
       }});
       document.querySelectorAll('.chunk-card[id^=\"chunk-\"]').forEach((card) => {{
         const id = card.getAttribute('id') || '';
@@ -894,14 +1215,16 @@
       const chunk = (chapter.chunks || [])[chunkIdx];
       if (!chunk) return;
       const key = `${{chapterIdx}}-${{chunkIdx}}`;
-      if (chatState.selectedChunks.some((x) => x.key === key)) return;
+      if (chatState.selectedChunks.some((x) => x.key === key)) {{
+        removeSelectedChunk(key);
+        return;
+      }}
       const label = `Chapter ${{chapterIdx + 1}} · Chunk ${{chunkIdx + 1}}`;
       const title = normalizeChunkTitle(chunk.title || '');
       const content = [title, chunkPlainText(chunk)].filter(Boolean).join('\\n');
-      chatState.selectedChunks.push({{ key, label, content }});
+      chatState.selectedChunks.push({{ key, label, title, content }});
       renderSelectedChunks();
       applyChunkSelectionUI();
-      flashChunkCard(chapterIdx, chunkIdx);
     }}
     function removeSelectedChunk(key) {{
       chatState.selectedChunks = chatState.selectedChunks.filter((x) => x.key !== key);
@@ -946,7 +1269,7 @@
       const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
       const key = `${{state.chapterIdx}}-${{state.chunkIdx}}`;
       const selected = isChunkSelected(key);
-      const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{state.chapterIdx}},${{state.chunkIdx}})' title='${{selected ? '已加入聊天' : '加入聊天'}}'>${{selected ? '✓' : '+'}}</button>`;
+      const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{state.chapterIdx}},${{state.chunkIdx}})' title='${{selected ? '移出聊天' : '加入聊天'}}'>${{selected ? '-' : '+'}}</button>`;
       $('chunkCard').innerHTML = `${{addBtn}}${{chapterHead}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}`;
       const percent = Math.round(((flatIndex(state.chapterIdx, state.chunkIdx) + 1) / flatCount()) * 100);
       setProgress(percent);
@@ -969,7 +1292,7 @@
           const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
           const key = `${{ci}}-${{ki}}`;
           const selected = isChunkSelected(key);
-          const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{ci}},${{ki}})' title='${{selected ? '已加入聊天' : '加入聊天'}}'>${{selected ? '✓' : '+'}}</button>`;
+          const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{ci}},${{ki}})' title='${{selected ? '移出聊天' : '加入聊天'}}'>${{selected ? '-' : '+'}}</button>`;
           return `<article class='chunk-card' id='chunk-${{ci}}-${{ki}}'>${{addBtn}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}</article>`;
         }}).join('');
         const chapterTitle = normalizeChapterTitle(chapter.title || '', ci);
@@ -1192,6 +1515,8 @@
     $('prevBtn').onclick = () => go(-1);
     $('nextBtn').onclick = () => go(1);
     $('chatSendBtn').onclick = sendChatMessage;
+    $('newChatBtn').onclick = createNewChat;
+    $('historyToggleBtn').onclick = toggleHistoryPanel;
     $('chatInput').addEventListener('keydown', (e) => {{
       if (e.key === 'Enter' && !e.shiftKey) {{
         e.preventDefault();
