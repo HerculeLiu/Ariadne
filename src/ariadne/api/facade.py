@@ -269,10 +269,21 @@ class AriadneAPI:
         except AriadneError as exc:
             return self._error(exc)
 
-    def undo(self, page_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def undo(self, courseware_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """撤销最后一次修改
+
+        Args:
+            courseware_id: 课件 ID
+            payload: {"page_id": str, "expected_version": int}
+        """
         try:
-            result = self.courseware.undo_latest(page_id=page_id, expected_version=int(payload.get("expected_version", 0)))
-            return self._ok({"page_id": page_id, **result})
+            page_id = payload.get("page_id", "")
+            result = self.courseware.undo_latest(
+                courseware_id=courseware_id,
+                page_id=page_id,
+                expected_version=int(payload.get("expected_version", 0))
+            )
+            return self._ok({"courseware_id": courseware_id, "page_id": page_id, **result})
         except AriadneError as exc:
             return self._error(exc)
 
@@ -471,14 +482,13 @@ class AriadneAPI:
         except ValueError:
             raise NotFoundError(f"invalid chunk_key format: {chunk_key}")
 
+        target_chapter_no = chapter_idx + 1
+        target_chunk_no = chunk_idx + 1
+
         # 遍历所有 courseware 找到对应的 chunk
         for cw in self.courseware.repo.list_all():
-            # chunks 按 order_no 排序
-            sorted_chunks = sorted(cw.chunks, key=lambda x: x.order_no)
-
-            # 根据 chapter_idx 和 chunk_idx 定位 chunk
-            if 0 <= chunk_idx < len(sorted_chunks):
-                chunk = sorted_chunks[chunk_idx]
-                return cw, chunk
+            for chunk in cw.chunks:
+                if chunk.chapter_no == target_chapter_no and chunk.chunk_no == target_chunk_no:
+                    return cw, chunk
 
         raise NotFoundError(f"chunk not found: {chunk_key}")

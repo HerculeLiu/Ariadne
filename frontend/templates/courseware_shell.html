@@ -436,6 +436,34 @@
     }}
     .msg.user {{ width: 100%; background: transparent; align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; border: none; padding: 0; box-shadow: none; }}
     .msg.assistant {{ align-self: flex-start; color: #2e3941; }}
+    .msg.assistant.pending {{
+      background: #ffffff;
+      border-color: #ddd2bf;
+      color: #66737c;
+    }}
+    .msg-pending-inner {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }}
+    .msg-pending-dots {{
+      display: inline-flex;
+      gap: 4px;
+    }}
+    .msg-pending-dots i {{
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #b8a88f;
+      display: block;
+      animation: pendingPulse 1s ease-in-out infinite;
+    }}
+    .msg-pending-dots i:nth-child(2) {{ animation-delay: .16s; }}
+    .msg-pending-dots i:nth-child(3) {{ animation-delay: .32s; }}
+    @keyframes pendingPulse {{
+      0%, 80%, 100% {{ opacity: .35; transform: translateY(0); }}
+      40% {{ opacity: 1; transform: translateY(-2px); }}
+    }}
     .msg-refs {{
       display: flex;
       flex-direction: column;
@@ -494,6 +522,11 @@
       border-radius: 8px; display: grid; place-items: center; cursor: pointer; color: #4f5e6b;
     }}
     .chat-tool:hover {{ background: #f4ecdf; }}
+    .chat-tool.active {{
+      background: #e8f0ee;
+      border-color: #9cb5aa;
+      color: #4e7a69;
+    }}
     .chat-tool svg {{ width: 15px; height: 15px; }}
     .chat-input {{
       border-top: 1px solid var(--line); background: #fffdf8; padding: 8px 10px;
@@ -668,6 +701,190 @@
     }}
     .chunk-card {{ animation: cardIn .24s ease both; }}
     .chat-send {{ min-width: 78px; }}
+
+    /* Chunk 修改建议卡片样式 */
+    .chunk-mod-list {{
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }}
+    .chunk-mod-card {{
+      background: #fff;
+      border: 1px solid var(--line, #d9ccb8);
+      border-radius: 8px;
+      padding: 12px;
+      border-left: 3px solid #bfb39d;
+    }}
+    .chunk-mod-card[data-should-modify="true"] {{
+      border-left-color: #9cb5aa;
+    }}
+    .chunk-mod-header {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }}
+    .chunk-mod-label {{
+      font-weight: 500;
+      color: #2e3941;
+      font-size: 13px;
+    }}
+    .chunk-mod-badge {{
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #f4ecdf;
+      color: #9cb5aa;
+    }}
+    .chunk-mod-card[data-should-modify="true"] .chunk-mod-badge {{
+      background: #e8f0ee;
+      color: #4e7a69;
+    }}
+    .chunk-mod-reason {{
+      font-size: 13px;
+      color: #59646d;
+      margin-bottom: 8px;
+      padding: 8px;
+      background: #f9f4ea;
+      border-radius: 4px;
+    }}
+    .chunk-mod-preview {{
+      margin: 8px 0;
+    }}
+    .chunk-mod-preview summary {{
+      cursor: pointer;
+      font-size: 12px;
+      color: #59646d;
+      padding: 4px 0;
+    }}
+    .chunk-mod-preview summary:hover {{
+      color: #2e3941;
+    }}
+    .chunk-mod-diff {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 8px;
+    }}
+    .diff-original, .diff-rewritten {{
+      background: #f9f4ea;
+      border-radius: 4px;
+      padding: 8px;
+    }}
+    .diff-original h4, .diff-rewritten h4 {{
+      font-size: 12px;
+      color: #59646d;
+      margin: 0 0 4px 0;
+    }}
+    .diff-original pre, .diff-rewritten pre {{
+      margin: 0;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }}
+    .chunk-mod-actions {{
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }}
+    .chunk-mod-actions button {{
+      padding: 6px 12px;
+      border: 1px solid #d9ccb8;
+      border-radius: 6px;
+      background: #fff;
+      color: #2e3941;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }}
+    .chunk-mod-actions button:hover {{
+      background: #f4ecdf;
+    }}
+    .btn-accept {{
+      background: #e8f0ee;
+      border-color: #9cb5aa;
+      color: #4e7a69;
+    }}
+    .btn-accept:hover {{
+      background: #d4e5e0;
+    }}
+    .btn-skip {{
+      color: #8b7d6c;
+    }}
+    /* Chunk 修改状态 */
+    .chunk-mod-card[data-status="applying"] {{
+      border-left-color: #e0a040;
+      opacity: 0.8;
+    }}
+    .chunk-mod-card[data-status="success"] {{
+      border-left-color: #7ab874;
+      background: #f0f7ed;
+    }}
+    .chunk-mod-card[data-status="failed"] {{
+      border-left-color: #d47a7a;
+    }}
+    .chunk-mod-card[data-status="skipped"] {{
+      opacity: 0.5;
+    }}
+    .status-applying, .status-success, .status-failed, .status-skipped {{
+      font-size: 13px;
+      padding: 6px 12px;
+    }}
+    .status-applying {{
+      color: #c48830;
+    }}
+    .status-success {{
+      color: #5a9a54;
+    }}
+    .status-failed {{
+      color: #c45a5a;
+    }}
+    .status-skipped {{
+      color: #8b7d6c;
+    }}
+    .toast-root {{
+      position: fixed;
+      right: 404px;
+      bottom: 18px;
+      z-index: 95;
+      display: grid;
+      gap: 8px;
+      pointer-events: none;
+    }}
+    .toast {{
+      min-width: 180px;
+      max-width: 320px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid #d8cdbd;
+      background: rgba(255, 253, 248, 0.96);
+      color: #314049;
+      box-shadow: 0 12px 28px rgba(48,42,30,.16);
+      font-size: 12px;
+      line-height: 1.45;
+      opacity: 0;
+      transform: translateY(6px);
+      animation: toastIn .18s ease forwards;
+    }}
+    .toast.warn {{
+      border-color: #e0bc8a;
+      background: rgba(255, 248, 236, 0.97);
+      color: #8a5b16;
+    }}
+    .toast.error {{
+      border-color: #e1b0ab;
+      background: rgba(255, 245, 243, 0.98);
+      color: #9b3a2e;
+    }}
+    @keyframes toastIn {{
+      to {{ opacity: 1; transform: translateY(0); }}
+    }}
+    @keyframes toastOut {{
+      to {{ opacity: 0; transform: translateY(4px); }}
+    }}
     @media (max-width: 980px) {{
       .nav {{ width: 220px; }}
       .main {{ left: 236px; right: 12px; top: 10px; bottom: 10px; }}
@@ -683,6 +900,7 @@
 <body>
   <button id='inspectorFab' class='inspector-fab' data-inspector-ui='1'>元素定位</button>
   <div id='inspectorHint' class='inspector-hint' data-inspector-ui='1'>选择模式已开启：点击任意页面元素</div>
+  <div id='toastRoot' class='toast-root' aria-live='polite'></div>
   <div id='inspectorModalMask' class='inspector-modal-mask' data-inspector-ui='1'>
     <div class='inspector-modal' data-inspector-ui='1'>
       <h3>元素定位信息</h3>
@@ -761,6 +979,13 @@
         </svg>
       </button>
       <input id='chatUploadInput' type='file' multiple style='display:none' accept='.pdf,.md,.txt,.docx'>
+      <button id='aiEditBtn' class='chat-tool' title='AI 编辑已选 Chunks' aria-label='AI Edit' data-tip='AI 编辑'>
+        <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>
+          <path d='M12 2a3 3 0 0 0-3 3v2a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z'></path>
+          <path d='M4.93 19.07a10 10 0 0 1 14.14 0'></path>
+          <path d='M12 12v.01'></path>
+        </svg>
+      </button>
     </div>
     <div class='chat-input'>
       <textarea id='chatInput' placeholder='Ask anything...'></textarea>
@@ -773,7 +998,7 @@
     const RENDER_CONFIG = {config_json};
     const state = {{ chapterIdx: 0, chunkIdx: 0 }};
     const inspectState = {{ active: false, hoverEl: null, selectedMeta: null }};
-    const chatState = {{ sessionId: '', sending: false, selectedChunks: [], historyOpen: false, sessions: [], uploadedFiles: [] }};
+    const chatState = {{ sessionId: '', sending: false, selectedChunks: [], historyOpen: false, sessions: [], uploadedFiles: [], aiEditMode: false, inputComposing: false, coursewareVersion: 1 }};
     const $ = (id) => document.getElementById(id);
     function showContentFallback(reason) {{
       const fallback = $('renderFallbackCard');
@@ -853,6 +1078,119 @@
         list.appendChild(row);
       }}
       list.scrollTop = list.scrollHeight;
+    }}
+    function appendPendingAssistant(text = '正在输出…') {{
+      const list = $('chatList');
+      if (!list) return null;
+      const row = document.createElement('div');
+      row.className = 'msg assistant pending';
+      row.innerHTML = `
+        <div class='msg-pending-inner'>
+          <span>${{esc(text)}}</span>
+          <span class='msg-pending-dots' aria-hidden='true'><i></i><i></i><i></i></span>
+        </div>
+      `;
+      list.appendChild(row);
+      list.scrollTop = list.scrollHeight;
+      return row;
+    }}
+    function updatePendingAssistant(row, text) {{
+      if (!row) return;
+      const label = row.querySelector('.msg-pending-inner > span');
+      if (label) label.textContent = text || '';
+    }}
+    function resolvePendingAssistant(row, text, isError = false) {{
+      if (!row) {{
+        appendChat('assistant', text || '');
+        return;
+      }}
+      row.className = `msg assistant${{isError ? ' error' : ''}}`;
+      row.textContent = text || '';
+      const list = $('chatList');
+      if (list) list.scrollTop = list.scrollHeight;
+    }}
+    function removePendingAssistant(row) {{
+      if (row && row.parentNode) row.parentNode.removeChild(row);
+    }}
+    function showToast(message, level = 'info', duration = 2200) {{
+      const root = $('toastRoot');
+      if (!root || !message) return;
+      const toast = document.createElement('div');
+      toast.className = `toast ${{level === 'warn' ? 'warn' : level === 'error' ? 'error' : ''}}`.trim();
+      toast.textContent = message;
+      root.appendChild(toast);
+      window.setTimeout(() => {{
+        toast.style.animation = 'toastOut .18s ease forwards';
+        window.setTimeout(() => toast.remove(), 180);
+      }}, duration);
+    }}
+    function parseChunkKey(key) {{
+      const parts = String(key || '').split('-').map(Number);
+      if (parts.length !== 2 || parts.some((n) => Number.isNaN(n))) return null;
+      return {{ chapterIdx: parts[0], chunkIdx: parts[1] }};
+    }}
+    function getChunkRefByKey(key) {{
+      const parsed = parseChunkKey(key);
+      if (!parsed) return null;
+      const chapter = MODEL.chapters[parsed.chapterIdx];
+      const chunk = chapter && chapter.chunks ? chapter.chunks[parsed.chunkIdx] : null;
+      if (!chapter || !chunk) return null;
+      return {{ ...parsed, chapter, chunk }};
+    }}
+    function getChunkSnapshotByKey(key) {{
+      const ref = getChunkRefByKey(key);
+      if (!ref) return null;
+      return {{
+        key,
+        title: normalizeChunkTitle(ref.chunk.title || ''),
+        content: chunkPlainText(ref.chunk),
+        chapterIdx: ref.chapterIdx,
+        chunkIdx: ref.chunkIdx,
+      }};
+    }}
+    function buildChunkPreviewText(title, content) {{
+      const parts = [];
+      const cleanTitle = String(title || '').trim();
+      const cleanContent = String(content || '').trim();
+      if (cleanTitle) parts.push(`标题：${{cleanTitle}}`);
+      if (cleanContent) parts.push(cleanContent);
+      return parts.join('\\n\\n');
+    }}
+    function contentToParagraphs(text) {{
+      return String(text || '')
+        .replace(/\r\n/g, '\n')
+        .split(/\n{{2,}}/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+    }}
+    function applyChunkUpdateLocally(chunkKey, chunkData) {{
+      const ref = getChunkRefByKey(chunkKey);
+      if (!ref) return;
+      if (chunkData.new_title) ref.chunk.title = chunkData.new_title;
+      ref.chunk.content = chunkData.rewritten_content || '';
+      ref.chunk.paragraphs = contentToParagraphs(chunkData.rewritten_content || '');
+      ref.chunk.bullets = [];
+      ref.chunk.tables = [];
+      ref.chunk.interactions = [];
+      ref.chunk.codes = [];
+      const selected = chatState.selectedChunks.find((x) => x.key === chunkKey);
+      if (selected) {{
+        selected.title = normalizeChunkTitle(ref.chunk.title || '');
+        selected.content = [selected.title, chunkPlainText(ref.chunk)].filter(Boolean).join('\\n');
+      }}
+      renderSelectedChunks();
+      render();
+    }}
+    async function loadCoursewareVersion() {{
+      if (!chatCoursewareId) return;
+      try {{
+        const data = await apiJson(`/api/v1/coursewares/${{encodeURIComponent(chatCoursewareId)}}`);
+        if (data.code === 0 && data.data && Number(data.data.current_version) > 0) {{
+          chatState.coursewareVersion = Number(data.data.current_version);
+        }}
+      }} catch (err) {{
+        console.warn('Failed to load courseware version:', err);
+      }}
     }}
     function jumpToChunk(key) {{
       if (!key) return;
@@ -990,11 +1328,15 @@
       const box = $('chatInput');
       const btn = $('chatSendBtn');
       const text = (box && box.value ? box.value : '').trim();
-      if (!text) return;  // Require user to enter a question
+      if (!text) return;
 
       const chunksToUse = [...chatState.selectedChunks];
+      if (chatState.aiEditMode && chunksToUse.length === 0) {{
+        showToast('请先选择要编辑的 chunk', 'warn');
+        return;
+      }}
 
-      // Build selected_context separately from message
+      // 正常 Chat 流程
       const selectedContext = chunksToUse
         .map((x) => `[${{x.label}}]\\n${{x.content}}`)
         .join('\\n\\n');
@@ -1005,12 +1347,24 @@
       autoGrowChatInput();
       chatState.sending = true;
       if (btn) btn.disabled = true;
+      let pending = appendPendingAssistant(chatState.aiEditMode ? '正在分析修改建议…' : '正在输出…');
       try {{
+        if (chatState.aiEditMode && chunksToUse.length > 0) {{
+          const intentResult = await analyzeIntent(text, true);
+          if (intentResult && intentResult.is_modification) {{
+            removePendingAssistant(pending);
+            pending = null;
+            showModificationSuggestions(intentResult.chunks || []);
+            return;
+          }}
+          updatePendingAssistant(pending, '正在输出…');
+        }}
+
         const sessionId = await ensureChatSession();
         const assetIds = getReadyAssetIds();
         const requestBody = {{
           session_id: sessionId,
-          message: text,  // Only user's question, without chunk content
+          message: text,
         }};
         if (selectedContext) {{
           requestBody.selected_context = selectedContext;
@@ -1023,12 +1377,12 @@
           body: JSON.stringify(requestBody),
         }});
         if (data.code !== 0) {{
-          appendChat('assistant', `Request failed: ${{data.message || 'unknown error'}}`);
+          resolvePendingAssistant(pending, `Request failed: ${{data.message || 'unknown error'}}`, true);
           return;
         }}
-        appendChat('assistant', (data.data && data.data.reply) || 'No response');
+        resolvePendingAssistant(pending, (data.data && data.data.reply) || 'No response');
       }} catch (err) {{
-        appendChat('assistant', `Request failed: ${{err && err.message ? err.message : String(err)}}`);
+        resolvePendingAssistant(pending, `Request failed: ${{err && err.message ? err.message : String(err)}}`, true);
       }} finally {{
         chatState.sending = false;
         if (btn) btn.disabled = false;
@@ -1707,7 +2061,16 @@
     $('chatSendBtn').onclick = sendChatMessage;
     $('newChatBtn').onclick = createNewChat;
     $('historyToggleBtn').onclick = toggleHistoryPanel;
+    $('chatInput').addEventListener('compositionstart', () => {{
+      chatState.inputComposing = true;
+    }});
+    $('chatInput').addEventListener('compositionend', () => {{
+      chatState.inputComposing = false;
+    }});
     $('chatInput').addEventListener('keydown', (e) => {{
+      if (e.isComposing || chatState.inputComposing || e.keyCode === 229) {{
+        return;
+      }}
       if (e.key === 'Enter' && !e.shiftKey) {{
         e.preventDefault();
         sendChatMessage();
@@ -1738,7 +2101,22 @@
         chatUploadInput.value = '';
       }});
     }}
+
+    // AI 编辑按钮点击事件 - 切换开关状态
+    const aiEditBtn = $('aiEditBtn');
+    if (aiEditBtn) {{
+      aiEditBtn.addEventListener('click', () => {{
+        chatState.aiEditMode = !chatState.aiEditMode;
+        if (chatState.aiEditMode) {{
+          aiEditBtn.classList.add('active');
+        }} else {{
+          aiEditBtn.classList.remove('active');
+        }}
+      }});
+    }}
+
     autoGrowChatInput();
+    loadCoursewareVersion();
     document.addEventListener('mousemove', (e) => {{
       if (!inspectState.active) return;
       const el = e.target;
@@ -1770,6 +2148,223 @@
     }} catch (err) {{
       showContentFallback(err && err.message ? err.message : String(err));
     }}
+
+    // ==================== Chunk 修改功能 ====================
+    const chunkModifications = new Map();
+    const chunkSuggestionsData = new Map();
+
+    async function analyzeIntent(message, explicitMode) {{
+      try {{
+        const response = await fetch('/api/v1/intent/analyze', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            message: message,
+            chunks: chatState.selectedChunks,
+            explicit_mode: explicitMode
+          }})
+        }});
+        const data = await response.json();
+        if (data.code === 0 && data.data) {{
+          return data.data;
+        }}
+        return null;
+      }} catch (err) {{
+        console.error('Intent analysis failed:', err);
+        return null;
+      }}
+    }}
+
+    function showModificationSuggestions(chunks) {{
+      if (chunks) {{
+        chunks.forEach(c => {{
+          chunkSuggestionsData.set(c.key, c);
+          chunkModifications.set(c.key, 'pending');
+        }});
+      }}
+
+      const chunksList = document.createElement('div');
+      chunksList.className = 'chunk-mod-list';
+
+      chunks.forEach((c) => {{
+        const chunkCard = document.createElement('div');
+        chunkCard.className = 'chunk-mod-card';
+        chunkCard.setAttribute('data-chunk-key', c.key);
+        chunkCard.setAttribute('data-status', 'pending');
+        chunkCard.setAttribute('data-should-modify', c.should_modify ? 'true' : 'false');
+
+        const header = document.createElement('div');
+        header.className = 'chunk-mod-header';
+
+        const label = document.createElement('span');
+        label.className = 'chunk-mod-label';
+        label.textContent = c.label;
+        header.appendChild(label);
+
+        const badge = document.createElement('span');
+        badge.className = 'chunk-mod-badge';
+        badge.textContent = c.should_modify ? '建议修改' : '无需修改';
+        header.appendChild(badge);
+
+        chunkCard.appendChild(header);
+
+        if (c.should_modify) {{
+          const reasonDiv = document.createElement('div');
+          reasonDiv.className = 'chunk-mod-reason';
+          reasonDiv.textContent = c.reason || '';
+          chunkCard.appendChild(reasonDiv);
+
+          const details = document.createElement('details');
+          details.className = 'chunk-mod-preview';
+
+          const summary = document.createElement('summary');
+          summary.textContent = '展开对比';
+          details.appendChild(summary);
+
+          const diffDiv = document.createElement('div');
+          diffDiv.className = 'chunk-mod-diff';
+          const originalSnapshot = getChunkSnapshotByKey(c.key);
+          const originalPreview = buildChunkPreviewText(
+            originalSnapshot ? originalSnapshot.title : '',
+            originalSnapshot ? originalSnapshot.content : ''
+          );
+          const rewrittenPreview = buildChunkPreviewText(
+            c.new_title || (originalSnapshot ? originalSnapshot.title : ''),
+            c.rewritten_content || ''
+          );
+
+          const originalDiv = document.createElement('div');
+          originalDiv.className = 'diff-original';
+          originalDiv.innerHTML = '<h4>原文</h4><pre>' + escapeHtml(originalPreview || '（原文为空）') + '</pre>';
+          diffDiv.appendChild(originalDiv);
+
+          const rewrittenDiv = document.createElement('div');
+          rewrittenDiv.className = 'diff-rewritten';
+          rewrittenDiv.innerHTML = '<h4>修改后</h4><pre>' + escapeHtml(rewrittenPreview || '（修改内容为空）') + '</pre>';
+          diffDiv.appendChild(rewrittenDiv);
+
+          details.appendChild(diffDiv);
+          chunkCard.appendChild(details);
+
+          const actions = document.createElement('div');
+          actions.className = 'chunk-mod-actions';
+
+          const acceptBtn = document.createElement('button');
+          acceptBtn.className = 'btn-accept';
+          acceptBtn.textContent = '✓ 应用修改';
+          acceptBtn.onclick = () => applyChunkModification(c.key);
+          actions.appendChild(acceptBtn);
+
+          const skipBtn = document.createElement('button');
+          skipBtn.className = 'btn-skip';
+          skipBtn.textContent = '✗ 跳过';
+          skipBtn.onclick = () => skipChunkModification(c.key);
+          actions.appendChild(skipBtn);
+
+          chunkCard.appendChild(actions);
+        }}
+
+        chunksList.appendChild(chunkCard);
+      }});
+
+      // 注意：不能使用 appendChat，因为它用 textContent 设置内容，会破坏 DOM 结构
+      // 此处需要显示复杂的交互组件（按钮、卡片等），必须直接操作 DOM
+      const chatList = $('chatList');
+      if (chatList) {{
+        const suggestionsRow = document.createElement('div');
+        suggestionsRow.className = 'msg assistant';
+        suggestionsRow.appendChild(chunksList);
+        chatList.appendChild(suggestionsRow);
+
+        chatList.scrollTop = chatList.scrollHeight;
+      }}
+    }}
+
+    function escapeHtml(str) {{
+      if (typeof str !== 'string') return str;
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }}
+
+    async function applyChunkModification(chunkKey) {{
+      const chunkData = chunkSuggestionsData.get(chunkKey);
+      if (!chunkData) {{
+        showToast('✗ 找不到 chunk 数据');
+        return;
+      }}
+
+      setChunkStatus(chunkKey, 'applying');
+
+      try {{
+        const response = await fetch('/api/v1/chunks/' + chunkKey + '/apply', {{
+          method: 'POST',
+          headers: {{ 'Content-Type': 'application/json' }},
+          body: JSON.stringify({{
+            new_content: chunkData.rewritten_content || '',
+            new_title: chunkData.new_title || null,
+            expected_version: chatState.coursewareVersion || 1
+          }})
+        }});
+        const data = await response.json();
+
+        if (data.code === 0) {{
+          const result = data.data || {{}};
+          if (result.version) {{
+            chatState.coursewareVersion = result.version;
+          }}
+          applyChunkUpdateLocally(chunkKey, chunkData);
+          if (result.outline_updated) {{
+            showToast('✓ Chunk 已更新，Outline 标题已同步');
+          }} else {{
+            showToast('✓ Chunk 已更新');
+          }}
+          setChunkStatus(chunkKey, 'success');
+        }} else {{
+          throw new Error(data.message || '修改失败');
+        }}
+      }} catch (err) {{
+        setChunkStatus(chunkKey, 'failed');
+        showToast('✗ 修改失败: ' + (err.message || err));
+      }}
+    }}
+
+    function skipChunkModification(chunkKey) {{
+      setChunkStatus(chunkKey, 'skipped');
+      const card = document.querySelector('[data-chunk-key="' + chunkKey + '"]');
+      if (card) {{
+        card.style.opacity = '0.5';
+      }}
+    }}
+
+    function setChunkStatus(chunkKey, status) {{
+      chunkModifications.set(chunkKey, status);
+      updateChunkCardUI(chunkKey, status);
+    }}
+
+    function updateChunkCardUI(chunkKey, status) {{
+      const card = document.querySelector('[data-chunk-key="' + chunkKey + '"]');
+      if (!card) return;
+
+      card.setAttribute('data-status', status);
+
+      const actions = card.querySelector('.chunk-mod-actions');
+      if (!actions) return;
+
+      if (status === 'applying') {{
+        actions.innerHTML = '<span class="status-applying">应用中...</span>';
+      }} else if (status === 'success') {{
+        actions.innerHTML = '<span class="status-success">✓ 已应用</span>';
+      }} else if (status === 'failed') {{
+        actions.innerHTML = '<span class="status-failed">✗ 失败</span>';
+      }} else if (status === 'skipped') {{
+        actions.innerHTML = '<span class="status-skipped">✗ 已跳过</span>';
+      }}
+    }}
+
   </script>
 </body>
 </html>"""
