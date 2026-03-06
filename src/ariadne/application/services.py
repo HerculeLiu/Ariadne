@@ -403,7 +403,7 @@ class GenerationService:
             max_workers = max(1, load_config().chunk_max_concurrency)
 
             def _run_one(task: dict) -> Tuple[int, str, str]:
-                # Build query for RAG
+                # Content Layer: retrieve chunk-specific references before generating explanation text.
                 query = f"{task['chapter_title']} {task['chunk_title']}"
                 rag_context = ""
 
