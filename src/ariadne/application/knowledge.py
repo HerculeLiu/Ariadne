@@ -77,8 +77,6 @@ def markdown_to_chunks(markdown_text: str) -> list[Chunk]:
 
 def chunks_to_markdown(topic: str, chunks: list[Chunk], material_lines: list[str] | None = None) -> str:
     lines: list[str] = [f"# {topic}", ""]
-    if material_lines:
-        lines.extend(["## 参考资料", *material_lines, ""])
 
     lines.append("## 章节1：核心讲解")
     lines.append("")

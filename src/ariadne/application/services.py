@@ -588,8 +588,6 @@ class GenerationService:
 
     def _build_markdown_from_outline(self, topic: str, outline: List[dict], chunks: List[Chunk], material_lines: List[str]) -> str:
         lines: List[str] = [f"# {topic}", ""]
-        if material_lines:
-            lines.extend(["## 参考资料", *material_lines, ""])
         chunk_by_order = {c.order_no: c for c in chunks}
         for ch in outline:
             chapter_title = self._sanitize_heading(ch["title"]) or f"章节{ch['chapter_no']}"
@@ -605,18 +603,11 @@ class GenerationService:
     def _build_knowledge_markdown(self, topic: str, llm_text: str, material_lines: List[str]) -> str:
         # Prefer direct LLM markdown output when available.
         if llm_text.startswith("#") or "## " in llm_text:
-            if material_lines:
-                material_block = "\n".join(["## 参考资料", *material_lines, ""])
-                if llm_text.startswith("# "):
-                    parts = llm_text.splitlines()
-                    head = parts[0]
-                    tail = "\n".join(parts[1:]).strip()
-                    return f"{head}\n\n{material_block}\n{tail}\n".strip() + "\n"
             return llm_text.rstrip() + "\n"
 
         # Fallback: wrap plain text into markdown.
         body = llm_text if llm_text else "暂无模型内容，已使用默认结构。"
-        return f"# {topic}\n\n## 参考资料\n" + ("\n".join(material_lines) if material_lines else "- 无") + f"\n\n## 知识讲解\n{body}\n"
+        return f"# {topic}\n\n## 知识讲解\n{body}\n"
 
     def _build_example_markdown(self, topic: str) -> str:
         page_title = "Test Playground" if (topic or "").strip().lower() == "test" else topic
@@ -866,15 +857,7 @@ class CoursewareService:
         return {"courseware_id": cw.id, "version": cw.current_version, "path": cw.knowledge_doc_path}
 
     def _sync_markdown(self, cw: Courseware) -> None:
-        material_lines = []
-        if "## 参考资料" in cw.knowledge_markdown:
-            section = cw.knowledge_markdown.split("## 参考资料", 1)[1]
-            for line in section.splitlines():
-                if line.startswith("- "):
-                    material_lines.append(line)
-                if line.startswith("## ") and not line.startswith("## 参考资料"):
-                    break
-        cw.knowledge_markdown = chunks_to_markdown(topic=cw.topic, chunks=cw.chunks, material_lines=material_lines)
+        cw.knowledge_markdown = chunks_to_markdown(topic=cw.topic, chunks=cw.chunks)
         cw.knowledge_doc_path = self.knowledge_store.save(cw.id, cw.knowledge_markdown, source_asset_ids=cw.source_asset_ids)
 
     def _find_chunk(self, chunk_id: str) -> Tuple[Courseware, Chunk]:

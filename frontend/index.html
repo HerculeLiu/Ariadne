@@ -16,6 +16,8 @@
       --olive-2: #3f7661;
       --accent: #c46f35;
       --accent-soft: #e9d2bf;
+      --chip: #f2ebdf;
+      --chip-text: #3c4b56;
       --shadow: 0 12px 40px rgba(48, 42, 30, 0.12);
       --radius-xl: 28px;
       --radius-lg: 18px;
@@ -120,6 +122,355 @@
       gap: 14px;
       justify-items: center;
       width: 100%;
+      transition: var(--fast);
+    }
+
+    .hero.has-progress {
+      /* No layout change - structure panel is now fixed */
+    }
+
+    /* Structure Preview Panel - Fixed Sidebar */
+    .structure-panel {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 300px;
+      display: none;
+      flex-direction: column;
+      padding: 14px 12px 12px;
+      overflow: hidden;
+      z-index: 50;
+      background: linear-gradient(180deg, #fffdf8, #f7f2e7);
+      border-left: 1px solid var(--line);
+      box-shadow: -10px 0 26px rgba(48, 42, 30, 0.12);
+      transition: transform 0.2s ease;
+    }
+
+    .structure-panel.visible {
+      display: flex;
+    }
+
+    .structure-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 0 2px 10px;
+      border-bottom: 1px solid var(--line);
+      position: relative;
+      padding-right: 36px;
+    }
+
+    .structure-close {
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      background: #fffdf8;
+      color: var(--muted);
+      border-radius: 8px;
+      padding: 0;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: all 0.15s ease;
+    }
+
+    .structure-close:hover {
+      background: #f4ecdf;
+      color: var(--ink);
+      border-color: #cbbfa9;
+    }
+
+    .structure-title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .structure-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .structure-status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--line-strong);
+      animation: pulse 1.1s infinite ease-in-out;
+    }
+
+    .structure-status-dot.generating {
+      background: var(--accent);
+    }
+
+    .structure-status-dot.done {
+      background: var(--olive);
+      animation: none;
+    }
+
+    .structure-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Custom scrollbar */
+    .structure-tree::-webkit-scrollbar {
+      width: 4px;
+    }
+    .structure-tree::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .structure-tree::-webkit-scrollbar-thumb {
+      background: var(--line-strong);
+      border-radius: 4px;
+    }
+
+    /* Skeleton loading state */
+    .structure-skeleton {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 4px;
+    }
+
+    .skeleton-line {
+      height: 12px;
+      background: linear-gradient(90deg, var(--line) 25%, var(--line-strong) 50%, var(--line) 75%);
+      background-size: 200% 100%;
+      border-radius: 6px;
+      animation: skeleton-shimmer 1.2s ease-in-out infinite;
+    }
+
+    .skeleton-line.chapter { width: 75%; }
+    .skeleton-line.chunk { width: 55%; margin-left: 8px; }
+    .skeleton-line:nth-child(2) { animation-delay: 0.1s; }
+    .skeleton-line:nth-child(3) { animation-delay: 0.2s; }
+    .skeleton-line:nth-child(4) { animation-delay: 0.3s; }
+
+    @keyframes skeleton-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Chapter nodes - sidebar style */
+    .structure-chapter {
+      overflow: hidden;
+      transition: all var(--fast);
+    }
+
+    .structure-chapter-header {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #fffdf8;
+      color: var(--ink);
+      border-radius: 12px;
+      padding: 10px 11px;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .structure-chapter-header:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(48, 42, 30, 0.08);
+      border-color: #bfb39d;
+    }
+
+    .structure-chapter.generating .structure-chapter-header {
+      border-color: #e0b89a;
+      background: linear-gradient(135deg, #fffdf8, #fff3ea);
+      box-shadow: 0 8px 18px rgba(196, 111, 53, 0.12);
+    }
+
+    .structure-chapter.done .structure-chapter-header {
+      border-color: #97b3a7;
+      background: #f1f6f2;
+    }
+
+    .structure-chapter-icon {
+      width: 14px;
+      height: 14px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      transition: transform var(--fast);
+      flex-shrink: 0;
+    }
+
+    .structure-chapter.expanded .structure-chapter-icon {
+      transform: rotate(90deg);
+    }
+
+    .structure-chapter-title {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .structure-chapter-status {
+      font-size: 10px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--chip-text);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .structure-chapter.generating .structure-chapter-status {
+      background: var(--accent-soft);
+      color: #8b4a28;
+    }
+
+    .structure-chapter.done .structure-chapter-status {
+      background: rgba(63, 124, 97, 0.2);
+      color: var(--olive);
+    }
+
+    .structure-chunks {
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      margin: 2px 0 8px;
+      padding-left: 8px;
+    }
+
+    .structure-chapter.expanded .structure-chunks {
+      display: flex;
+    }
+
+    /* Chunk items - sidebar style */
+    .structure-chunk {
+      width: 100%;
+      border: 1px solid #e2d8c8;
+      border-radius: 9px;
+      background: #fffaf2;
+      color: #4d5963;
+      font-size: 12px;
+      line-height: 1.35;
+      padding: 6px 8px;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .structure-chunk:hover {
+      border-color: #cbbfa9;
+      background: #f8efdf;
+    }
+
+    .structure-chunk.queued {
+      opacity: 0.6;
+    }
+
+    .structure-chunk.generating {
+      border-color: #e0b89a;
+      background: rgba(196, 111, 53, 0.08);
+      color: var(--accent);
+    }
+
+    .structure-chunk.done {
+      color: #2e3941;
+    }
+
+    .structure-chunk-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--line-strong);
+      flex-shrink: 0;
+    }
+
+    .structure-chunk.generating .structure-chunk-dot {
+      background: var(--accent);
+      animation: pulse 0.8s infinite ease-in-out;
+    }
+
+    .structure-chunk.done .structure-chunk-dot {
+      background: var(--olive);
+    }
+
+    .structure-chunk-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Empty/Initial state */
+    .structure-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 32px 16px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .structure-empty-icon {
+      width: 48px;
+      height: 48px;
+      color: var(--line-strong);
+      opacity: 0.5;
+    }
+
+    .structure-empty-text {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* Completion state */
+    .structure-complete {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 24px 16px;
+      text-align: center;
+    }
+
+    .structure-complete-icon {
+      width: 32px;
+      height: 32px;
+      color: var(--olive);
+    }
+
+    .structure-complete-text {
+      font-size: 13px;
+      color: var(--ink);
+      font-weight: 500;
+    }
+
+    .structure-complete-sub {
+      font-size: 11px;
+      color: var(--muted);
     }
 
     .panel {
@@ -598,6 +949,10 @@
       .intro, .composer-wrap { min-height: auto; }
       .topic-input { min-height: 200px; }
       .actions { grid-template-columns: 1fr; }
+
+      .structure-panel {
+        width: 260px;
+      }
     }
 
     @media (max-width: 640px) {
@@ -609,6 +964,24 @@
         width: calc(100% - 24px);
       }
       .meta-pill { width: 100%; }
+
+      .structure-panel {
+        padding: 12px;
+      }
+
+      .structure-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .structure-title {
+        font-size: 14px;
+      }
+
+      .structure-subtitle {
+        font-size: 10px;
+      }
     }
   </style>
 </head>
@@ -721,11 +1094,80 @@
         <div id="assetFiles" class="asset-files"></div>
 
       </section>
+
+      <!-- Structure Preview Panel -->
+      <aside class="panel structure-panel" id="structurePanel">
+        <div class="structure-header">
+          <div>
+            <h3 class="structure-title">课程结构</h3>
+            <div class="structure-subtitle">正在根据上传资料拆解章节与讲解块</div>
+          </div>
+          <div class="structure-status">
+            <span id="structureStatusDot" class="structure-status-dot"></span>
+            <span id="structureStatusText">等待开始</span>
+          </div>
+          <button class="structure-close" id="structureClose" title="关闭面板">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Empty state -->
+        <div id="structureEmpty" class="structure-empty">
+          <svg class="structure-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+          <div class="structure-empty-text">
+            点击左侧"生成"按钮<br>
+            开始构建课程结构
+          </div>
+        </div>
+
+        <!-- Skeleton loading -->
+        <div id="structureSkeleton" class="structure-skeleton" style="display:none;">
+          <div class="skeleton-line chapter"></div>
+          <div class="skeleton-line chunk"></div>
+          <div class="skeleton-line chunk"></div>
+          <div class="skeleton-line chapter"></div>
+          <div class="skeleton-line chunk"></div>
+          <div class="skeleton-line chunk"></div>
+          <div class="skeleton-line chunk"></div>
+        </div>
+
+        <!-- Structure tree -->
+        <div id="structureTree" class="structure-tree" style="display:none;"></div>
+
+        <!-- Complete state -->
+        <div id="structureComplete" class="structure-complete" style="display:none;">
+          <svg class="structure-complete-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+          <div class="structure-complete-text">课程结构生成完成</div>
+          <div class="structure-complete-sub">即将跳转到课件页面...</div>
+        </div>
+      </aside>
     </section>
   </div>
 
   <script>
-    const state = { coursewareId: null, chunks: [], webEnabled: false, uploadedFiles: [] };
+    const state = {
+      coursewareId: null,
+      chunks: [],
+      webEnabled: false,
+      uploadedFiles: [],
+      // Structure preview state
+      outlineSignature: null,  // Stable signature for outline change detection
+      structure: null,
+      completedChunks: [],
+      structurePanelDismissed: false,
+    };
     const inspectState = { active: false, hoverEl: null, selectedMeta: null };
     let toastTimer = null;
     let loadingStageTimer = null;
@@ -946,9 +1388,19 @@
         payload.asset_ids = assetIds;
       }
 
+      // Reset structure state
+      state.outlineSignature = null;
+      state.completedChunks = [];
+      state.structure = null;
+      state.structurePanelDismissed = false;
+
       $('btnGenerate').disabled = true;
       $('processingTip').style.display = 'inline-flex';
       $('processingText').textContent = '排队中...';
+
+      // Show structure panel in loading state
+      showStructureState('loading');
+
       if (loadingStageTimer) clearTimeout(loadingStageTimer);
       if (progressPollTimer) clearInterval(progressPollTimer);
 
@@ -960,10 +1412,12 @@
         if (res.code !== 0) {
           const detail = res.error && res.error.reason ? `${res.message}: ${res.error.reason}` : res.message;
           showToast(`生成失败：${detail}`, 'warn', 5200);
+          showStructureState('idle');
           return;
         }
         state.coursewareId = res.data.courseware_id;
         showToast('任务已提交，正在分块生成...');
+
         progressPollTimer = setInterval(async () => {
           try {
             const pr = await api(`/api/v1/coursewares/${state.coursewareId}/progress`);
@@ -973,6 +1427,8 @@
             const progress = Number(data.progress || 0);
             const done = Number(data.chunk_done || 0);
             const total = Number(data.chunk_total || 0);
+
+            // Update processing tip text
             if (phase === 'outline') {
               $('processingText').textContent = `生成大纲中... ${progress}%`;
             } else if (phase === 'chunk_generating') {
@@ -983,29 +1439,62 @@
               $('processingText').textContent = '拼接与规范化中...';
             } else if (phase === 'done') {
               $('processingText').textContent = '生成完成，准备打开...';
+              showStructureState('complete', { done, total });
               clearInterval(progressPollTimer);
               progressPollTimer = null;
               setTimeout(() => {
                 location.href = `/downloads/${encodeURIComponent(state.coursewareId)}.html`;
-              }, 280);
+              }, 420);
+              return;
             } else if (phase === 'failed') {
               clearInterval(progressPollTimer);
               progressPollTimer = null;
               showToast(`生成失败：${data.error || 'unknown error'}`, 'warn', 5200);
               $('btnGenerate').disabled = false;
               $('processingTip').style.display = 'none';
+              showStructureState('idle');
+              return;
             } else {
               $('processingText').textContent = `处理中... ${progress}%`;
             }
+
+            // Update structure panel
+            const outline = data.outline;
+            if (Array.isArray(outline)) {
+              // Use stable signature for change detection (avoid re-render on same content)
+              const outlineSignature = JSON.stringify(outline);
+              if (outlineSignature !== state.outlineSignature) {
+                state.outlineSignature = outlineSignature;
+                // Preserve expanded states when re-parsing
+                const oldStructure = state.structure;
+                state.structure = parseOutline(outline, oldStructure);
+                showStructureState('generating', { done, total });
+                renderStructureTree(state.structure);
+              }
+            }
+
+            // Update completed chunks
+            if (state.structure) {
+              const completed = Array.isArray(data.completed_chunks) ? data.completed_chunks : [];
+              // Only update if there are changes
+              if (completed.length !== state.completedChunks.length ||
+                  !completed.every(c => state.completedChunks.includes(c))) {
+                state.completedChunks = completed;
+                updateChunkStatus(state.structure, state.completedChunks);
+                renderStructureTree(state.structure);
+              }
+            }
+
           } catch (_) {
             // transient polling error, ignore
           }
-        }, 1000);
+        }, 800); // Poll slightly faster for smoother updates
       } catch (err) {
         const msg = err && err.message ? err.message : String(err);
         showToast(`网络或服务异常：${msg}`, 'warn', 5000);
         $('btnGenerate').disabled = false;
         $('processingTip').style.display = 'none';
+        showStructureState('idle');
       } finally {
         if (loadingStageTimer) clearTimeout(loadingStageTimer);
         loadingStageTimer = null;
@@ -1176,6 +1665,190 @@
     }
 
     window.removeAssetFile = removeAssetFile;
+
+    // === Structure Preview Functions ===
+
+    function parseOutline(outline, preserveExpandedFrom = null) {
+      // Parse backend outline array into structure tree
+      // Backend format: [{ chapter_no, chapter_title, chunk_titles: [...] }, ...]
+      if (!Array.isArray(outline)) return [];
+
+      // Build a map of expanded states to preserve
+      const expandedMap = new Map();
+      if (preserveExpandedFrom) {
+        for (const ch of preserveExpandedFrom) {
+          expandedMap.set(ch.chapterNo, !!ch.expanded);
+        }
+      }
+
+      return outline.map((chapter, ci) => {
+        const chapterNo = chapter.chapter_no || (ci + 1);
+        return {
+          chapterNo: chapterNo,
+          title: chapter.chapter_title || `章节${chapterNo}`,
+          status: 'queued',
+          expanded: expandedMap.has(chapterNo) ? expandedMap.get(chapterNo) : ci === 0,
+          chunks: (chapter.chunk_titles || []).map((chunkTitle, ki) => ({
+            key: `Chapter ${chapterNo} · Chunk ${ki + 1}`,
+            title: chunkTitle || `Chunk ${ki + 1}`,
+            status: 'queued',
+          })),
+        };
+      });
+    }
+
+    function updateChunkStatus(structure, completedChunks) {
+      // Update chunk statuses based on completed_chunks from API
+      // Backend completed_chunks format: ["Chapter 1 · Chunk 1", "Chapter 1 · Chunk 2", ...]
+      const completed = new Set(completedChunks || []);
+
+      // First pass: mark all chunks as done, generating, or queued
+      let foundGenerating = false;
+
+      for (const chapter of structure) {
+        for (const chunk of chapter.chunks) {
+          if (completed.has(chunk.key)) {
+            chunk.status = 'done';
+          } else if (!foundGenerating) {
+            // First non-completed chunk is the generating one
+            chunk.status = 'generating';
+            foundGenerating = true;
+          } else {
+            chunk.status = 'queued';
+          }
+        }
+      }
+
+      // Second pass: set chapter status based on chunks
+      for (const chapter of structure) {
+        const hasChunks = chapter.chunks.length > 0;
+        const allDone = hasChunks && chapter.chunks.every(c => c.status === 'done');
+        const hasGenerating = chapter.chunks.some(c => c.status === 'generating');
+
+        if (allDone) {
+          chapter.status = 'done';
+        } else if (hasGenerating) {
+          chapter.status = 'generating';
+        } else {
+          chapter.status = 'queued';
+        }
+      }
+    }
+
+    function renderStructureTree(structure) {
+      if (!structure || !structure.length) {
+        $('structureTree').innerHTML = '';
+        return;
+      }
+
+      const html = structure.map((chapter, ci) => {
+        const chapterStatusClass = chapter.status || 'queued';
+        const chapterStatusText =
+          chapterStatusClass === 'done' ? '完成' :
+          chapterStatusClass === 'generating' ? '生成中' : '等待中';
+
+        // Use expanded state from data model, with defaults for new chapters
+        const isExpanded = chapter.expanded ?? (ci === 0);
+
+        const chunksHtml = chapter.chunks.map(chunk => {
+          const statusClass = chunk.status || 'queued';
+          return `
+            <div class="structure-chunk ${statusClass}">
+              <span class="structure-chunk-dot"></span>
+              <span class="structure-chunk-text">${esc(chunk.title)}</span>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="structure-chapter ${chapterStatusClass} ${isExpanded ? 'expanded' : ''}" data-chapter="${chapter.chapterNo}">
+            <div class="structure-chapter-header" onclick="toggleStructureChapter(${chapter.chapterNo})">
+              <svg class="structure-chapter-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <span class="structure-chapter-title">${esc(chapter.title)}</span>
+              <span class="structure-chapter-status">${chapterStatusText}</span>
+            </div>
+            <div class="structure-chunks">
+              ${chunksHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      $('structureTree').innerHTML = html;
+    }
+
+    window.toggleStructureChapter = function(chapterNo) {
+      if (!state.structure) return;
+      const chapter = state.structure.find(ch => ch.chapterNo === chapterNo);
+      if (chapter) {
+        // Toggle expanded state in data model
+        chapter.expanded = !chapter.expanded;
+        // Re-render to reflect the change
+        renderStructureTree(state.structure);
+      }
+    };
+
+    // Close structure panel
+    $('structureClose').addEventListener('click', () => {
+      state.structurePanelDismissed = true;
+      $('structurePanel').classList.remove('visible');
+    });
+
+    function showStructureState(phase, data = {}) {
+      const panel = $('structurePanel');
+      const empty = $('structureEmpty');
+      const skeleton = $('structureSkeleton');
+      const tree = $('structureTree');
+      const complete = $('structureComplete');
+      const statusDot = $('structureStatusDot');
+      const statusText = $('structureStatusText');
+
+      // Hide all states first
+      empty.style.display = 'none';
+      skeleton.style.display = 'none';
+      complete.style.display = 'none';
+
+      if (!phase || phase === 'idle') {
+        panel.classList.remove('visible');
+        tree.style.display = 'none';
+        statusDot.className = 'structure-status-dot';
+        statusText.textContent = '等待开始';
+        empty.style.display = 'flex';
+        return;
+      }
+
+      // Show panel in progress mode
+      if (state.structurePanelDismissed) return;
+      panel.classList.add('visible');
+
+      if (phase === 'loading') {
+        tree.style.display = 'none';
+        skeleton.style.display = 'flex';
+        statusDot.className = 'structure-status-dot generating';
+        statusText.textContent = '生成大纲中...';
+        return;
+      }
+
+      if (phase === 'generating') {
+        tree.style.display = 'flex';
+        statusDot.className = 'structure-status-dot generating';
+        const done = data.done || 0;
+        const total = data.total || '?';
+        statusText.textContent = `生成中 ${done}/${total}`;
+        return;
+      }
+
+      if (phase === 'complete') {
+        // Keep tree visible, show completion message at bottom
+        tree.style.display = 'flex';
+        complete.style.display = 'flex';
+        statusDot.className = 'structure-status-dot done';
+        statusText.textContent = '生成完成';
+        return;
+      }
+    };
 
     function getReadyAssetIds() {
       return state.uploadedFiles
