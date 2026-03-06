@@ -1,0 +1,23 @@
+# Ariadne Project Dependencies
+
+# Core
+pyyaml>=6.0
+python-dotenv>=1.0
+
+# LLM / RAG
+chromadb>=1.5.0
+
+# Web Framework
+fastapi>=0.115.0
+uvicorn>=0.30.0
+
+# HTTP Client
+requests>=2.32.0
+httpx>=0.28.0
+
+# Data Validation
+pydantic>=2.10
+
+# Utilities
+rich>=14.0
+tqdm>=4.67
