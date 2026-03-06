@@ -22,6 +22,11 @@
         linear-gradient(160deg,var(--bg-1),var(--bg-2));
       overflow: hidden;
     }}
+    body.embed-mode .inspector-fab,
+    body.embed-mode .inspector-hint,
+    body.embed-mode .inspector-modal-mask {{
+      display: none !important;
+    }}
     .app {{ width:100%; margin:0; padding:0; }}
     .back-home {{
       display:flex; align-items:center; justify-content:center;
@@ -798,6 +803,13 @@
     const chatCoursewareId = (() => {{
       const m = String(location.pathname || '').match(/\/downloads\/([^/]+)\.html$/);
       return m ? m[1] : '';
+    }})();
+    const embedMode = (() => {{
+      try {{
+        return new URLSearchParams(location.search).get('embed') === '1';
+      }} catch (_) {{
+        return false;
+      }}
     }})();
 
     async function apiJson(path, options = {{}}) {{
@@ -1753,6 +1765,7 @@
       stopInspectMode();
     }}, true);
     try {{
+      if (embedMode) document.body.classList.add('embed-mode');
       render();
     }} catch (err) {{
       showContentFallback(err && err.message ? err.message : String(err));
