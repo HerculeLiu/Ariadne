@@ -137,19 +137,31 @@ class LLMAgent:
         chapter_summary: str,
         chunk_title: str,
         rag_context: str = "",
+        writing_style: str = "",
+        audience_level: str = "",
     ) -> str:
-        system_prompt = self.prompts.get("chunk_layer.md") or self.prompts.get("understand_layer.md")
+        system_prompt = self.prompts.get("explain_layer.md")
+        if not system_prompt.strip():
+            raise LLMServiceError(
+                "missing explain layer prompt",
+                field="prompt",
+                reason="src/prompt/explain_layer.md is required for content generation",
+            )
         user_prompt_parts = [
             f"topic={topic}",
             f"chapter_title={chapter_title}",
             f"chapter_summary={chapter_summary}",
             f"chunk_title={chunk_title}",
         ]
+        if writing_style:
+            user_prompt_parts.append(f"writing_style={writing_style}")
+        if audience_level:
+            user_prompt_parts.append(f"audience_level={audience_level}")
         if rag_context:
-            user_prompt_parts.append(f"\n{rag_context}\n")
-            user_prompt_parts.append("请基于以上参考资料，生成该chunk的内容。如果资料不足，可以基于通用知识补充。")
+            user_prompt_parts.append(f"reference_materials={rag_context}")
+            user_prompt_parts.append("请基于以上参考资料生成该 chunk 的讲解内容；如有补充，请与参考资料保持一致且明确克制。")
         else:
-            user_prompt_parts.append("请仅输出该chunk正文内容，不要重复章节或chunk标题。")
+            user_prompt_parts.append("请输出该 chunk 的讲解内容，不要重复章节或 chunk 标题。")
         user_prompt = "\n".join(user_prompt_parts)
         return self._chat([
             {"role": "system", "content": system_prompt},
