@@ -43,9 +43,6 @@ class Chunk:
 class Courseware:
     id: str
     topic: str
-    difficulty: str
-    style: str
-    template: str
     created_at: str
     status: str = "ready"
     current_version: int = 1

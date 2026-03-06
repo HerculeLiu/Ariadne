@@ -5,7 +5,6 @@
 - chapter_title
 - chapter_summary
 - chunk_title
-- difficulty/style/template
 
 要求：
 - 只输出该 chunk 正文，不输出章节标题与 chunk 标题。

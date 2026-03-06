@@ -49,7 +49,6 @@ Notes:
 
 ## Content quality
 - Keep explanation aligned with topic and keywords.
-- Respect requested difficulty/style/template.
 - Include practical examples and edge-case tips.
 - This project does NOT include review/exam/test content. Do not generate quiz, flashcard, exercises, score, or checkpoints.
 - Hard prohibition (must follow):

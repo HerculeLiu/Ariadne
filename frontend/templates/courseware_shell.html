@@ -426,10 +426,10 @@
     }}
     .msg {{
       max-width: 92%; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px;
-      font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: #fff;
+      font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; background: #faf7f1;
       box-shadow: 0 4px 14px rgba(48,42,30,.08);
     }}
-    .msg.user {{ width: 100%; background: #f9f4ea; align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; border: 1px solid #f9f4ea; box-shadow: none; }}
+    .msg.user {{ width: 100%; background: transparent; align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; border: none; padding: 0; box-shadow: none; }}
     .msg.assistant {{ align-self: flex-start; color: #2e3941; }}
     .msg-refs {{
       display: flex;
@@ -442,12 +442,13 @@
       flex-direction: column;
       padding: 5px 8px;
       border-radius: 6px;
-      background: #f9f4ea;
+      background: #faf7f1;
       cursor: pointer;
       transition: all 0.15s ease;
+      box-shadow: 0 2px 8px rgba(48,42,30,.06);
     }}
     .msg-ref-card:hover {{
-      background: #f4ecdf;
+      background: #f5f0e6;
     }}
     .msg-ref-title {{
       font-size: 13px;
@@ -473,10 +474,11 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       padding: 8px 10px;
-      background: #f9f4ea;
+      background: #faf7f1;
       color: #1f4b3d;
       word-break: break-word;
       max-width: 280px;
+      box-shadow: 0 4px 14px rgba(48,42,30,.08);
     }}
     .chat-tools {{
       display: flex; align-items: center; gap: 8px; padding: 8px 10px;

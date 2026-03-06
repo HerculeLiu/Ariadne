@@ -101,11 +101,11 @@ class LLMAgent:
         )
         raise LLMServiceError("llm request failed", reason=reason)
 
-    def generate_understanding_markdown(self, topic: str, keywords: list[str], difficulty: str, style: str, template: str) -> str:
+    def generate_understanding_markdown(self, topic: str, keywords: list[str]) -> str:
         # New naming: 理解层提示词
         system_prompt = self.prompts.get("understand_layer.md") or self.prompts.get("generate_courseware.md")
         user_prompt = (
-            f"topic={topic}\nkeywords={keywords}\ndifficulty={difficulty}\nstyle={style}\ntemplate={template}\n"
+            f"topic={topic}\nkeywords={keywords}\n"
             "请输出3-5个学习chunk，每个chunk给出标题和内容。"
         )
         return self._chat([
@@ -113,10 +113,10 @@ class LLMAgent:
             {"role": "user", "content": user_prompt},
         ])
 
-    def generate_outline_markdown(self, topic: str, keywords: list[str], difficulty: str, style: str, template: str) -> str:
+    def generate_outline_markdown(self, topic: str, keywords: list[str]) -> str:
         system_prompt = self.prompts.get("outline_layer.md") or self.prompts.get("understand_layer.md")
         user_prompt = (
-            f"topic={topic}\nkeywords={keywords}\ndifficulty={difficulty}\nstyle={style}\ntemplate={template}\n"
+            f"topic={topic}\nkeywords={keywords}\n"
             "请只输出章节和chunk标题，不要写正文段落。"
         )
         return self._chat([
@@ -130,24 +130,29 @@ class LLMAgent:
         chapter_title: str,
         chapter_summary: str,
         chunk_title: str,
-        difficulty: str,
-        style: str,
-        template: str,
+        rag_context: str = "",
     ) -> str:
         system_prompt = self.prompts.get("chunk_layer.md") or self.prompts.get("understand_layer.md")
-        user_prompt = (
-            f"topic={topic}\nchapter_title={chapter_title}\nchapter_summary={chapter_summary}\n"
-            f"chunk_title={chunk_title}\ndifficulty={difficulty}\nstyle={style}\ntemplate={template}\n"
-            "请仅输出该chunk正文内容，不要重复章节或chunk标题。"
-        )
+        user_prompt_parts = [
+            f"topic={topic}",
+            f"chapter_title={chapter_title}",
+            f"chapter_summary={chapter_summary}",
+            f"chunk_title={chunk_title}",
+        ]
+        if rag_context:
+            user_prompt_parts.append(f"\n{rag_context}\n")
+            user_prompt_parts.append("请基于以上参考资料，生成该chunk的内容。如果资料不足，可以基于通用知识补充。")
+        else:
+            user_prompt_parts.append("请仅输出该chunk正文内容，不要重复章节或chunk标题。")
+        user_prompt = "\n".join(user_prompt_parts)
         return self._chat([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ])
 
-    def generate_courseware_text(self, topic: str, keywords: list[str], difficulty: str, style: str, template: str) -> str:
+    def generate_courseware_text(self, topic: str, keywords: list[str]) -> str:
         # Backward compatibility
-        return self.generate_understanding_markdown(topic, keywords, difficulty, style, template)
+        return self.generate_understanding_markdown(topic, keywords)
 
     def answer_chunk_question(self, context: str, question: str, mode: str) -> str:
         system_prompt = self.prompts.get("chunk_qa.md")

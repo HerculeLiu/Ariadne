@@ -50,11 +50,11 @@ from ariadne.infrastructure.repositories import (
 )
 from ariadne.infrastructure.app_logger import get_logger, setup_logging
 from ariadne.llm.agent import LLMAgent, PromptStore
+from ariadne.llm.embedding_client import EmbeddingClient
+from ariadne.application.rag_service import RAGService, make_fragment_id
+from ariadne.infrastructure.vector_store import VectorStore
 
 ALLOWED_FILE_TYPES = {"pdf", "md", "txt"}
-VALID_DIFFICULTY = {"beginner", "intermediate", "advanced"}
-VALID_STYLE = {"intuitive", "rigorous", "engineering"}
-VALID_TEMPLATE = {"tutorial", "qa", "project"}
 VALID_UNDERSTAND = {"unknown", "understood", "not_understood"}
 logger = get_logger("services")
 
@@ -153,6 +153,9 @@ class GenerationService:
         llm: LLMAgent,
         event_store: EventMetricStore,
         knowledge_store: KnowledgeDocStore,
+        config: AppConfig = None,
+        embedding_client: EmbeddingClient = None,
+        rag_service: RAGService = None,
     ) -> None:
         self.coursewares = coursewares
         self.jobs = jobs
@@ -160,18 +163,19 @@ class GenerationService:
         self.llm = llm
         self.event_store = event_store
         self.knowledge_store = knowledge_store
+        self.config = config or load_config()
+        self.embedding_client = embedding_client or EmbeddingClient(self.config)
+        self.rag_service = rag_service
         self._job_lock = threading.Lock()
 
     def generate(
         self,
         topic: str,
         keywords: List[str],
-        difficulty: str,
-        style: str,
-        template: str,
+        asset_ids: List[str] = None,
     ) -> Tuple[GenerationJob, Courseware]:
-        logger.info("generate start topic=%s difficulty=%s style=%s template=%s", topic, difficulty, style, template)
-        self._validate(topic, keywords, difficulty, style, template)
+        logger.info("generate start topic=%s asset_ids=%s", topic, asset_ids)
+        self._validate(topic, keywords)
 
         courseware_id = f"cw_{uuid4().hex[:8]}"
         job_id = f"job_{uuid4().hex[:8]}"
@@ -180,9 +184,6 @@ class GenerationService:
         courseware = Courseware(
             id=courseware_id,
             topic=topic,
-            difficulty=difficulty,
-            style=style,
-            template=template,
             created_at=now,
             status="processing",
             chunks=[],
@@ -200,7 +201,7 @@ class GenerationService:
         self.jobs.save(job)
         threading.Thread(
             target=self._run_generation_job,
-            args=(courseware_id, topic, keywords, difficulty, style, template),
+            args=(courseware_id, topic, keywords, asset_ids or []),
             daemon=True,
         ).start()
         self.event_store.add("generate", {"courseware_id": courseware_id, "topic": topic})
@@ -257,9 +258,7 @@ class GenerationService:
         courseware_id: str,
         topic: str,
         keywords: List[str],
-        difficulty: str,
-        style: str,
-        template: str,
+        asset_ids: List[str],
     ) -> None:
         courseware = self.coursewares.get(courseware_id)
         if not courseware:
@@ -339,11 +338,11 @@ class GenerationService:
                 return
 
             self._update_job(courseware_id, phase=JobPhase.OUTLINE, progress=15, message="generating outline")
-            outline_md = self.llm.generate_outline_markdown(topic, keywords, difficulty, style, template).strip()
+            outline_md = self.llm.generate_outline_markdown(topic, keywords).strip()
             outline = self._parse_outline_markdown(outline_md)
             if not outline:
                 # fallback for unstable outline responses
-                fallback = self.llm.generate_understanding_markdown(topic, keywords, difficulty, style, template).strip()
+                fallback = self.llm.generate_understanding_markdown(topic, keywords).strip()
                 outline = self._parse_outline_markdown(fallback)
             if not outline:
                 outline = self._fallback_outline(topic)
@@ -384,14 +383,31 @@ class GenerationService:
             max_workers = max(1, load_config().chunk_max_concurrency)
 
             def _run_one(task: dict) -> Tuple[int, str, str]:
+                # Build query for RAG
+                query = f"{task['chapter_title']} {task['chunk_title']}"
+                rag_context = ""
+
+                if asset_ids and self.rag_service:
+                    try:
+                        query_embedding = self.embedding_client.encode_single(query)
+                        results = self.rag_service.retrieve(
+                            query=query,
+                            query_embedding=query_embedding,
+                            top_k=3,
+                            asset_ids=asset_ids,
+                        )
+                        if results:
+                            rag_context = self.rag_service.format_context_for_prompt(results)
+                            logger.debug("RAG context for chunk %s: %d chars", task['chunk_title'], len(rag_context))
+                    except Exception as exc:
+                        logger.warning("RAG retrieval failed for chunk %s: %s", task['chunk_title'], exc)
+
                 body = self.llm.generate_chunk_content(
                     topic=topic,
                     chapter_title=task["chapter_title"],
                     chapter_summary=task["chapter_summary"],
                     chunk_title=task["chunk_title"],
-                    difficulty=difficulty,
-                    style=style,
-                    template=template,
+                    rag_context=rag_context,
                 ).strip()
                 return task["order_no"], task["chunk_title"], body
 
@@ -453,7 +469,7 @@ class GenerationService:
                 lines.append(f"- {asset.file_name} ({asset.file_type})")
         return lines
 
-    def _validate(self, topic: str, keywords: List[str], difficulty: str, style: str, template: str) -> None:
+    def _validate(self, topic: str, keywords: List[str]) -> None:
         topic = (topic or "").strip()
         if len(topic) < 2 or len(topic) > 120:
             raise ValidationError("invalid topic length", field="topic", reason="length must be between 2 and 120")
@@ -466,21 +482,14 @@ class GenerationService:
                     field="keywords",
                     reason="single keyword length must be between 1 and 64",
                 )
-        if difficulty not in VALID_DIFFICULTY:
-            raise ValidationError("invalid difficulty", field="difficulty", reason="invalid enum value")
-        if style not in VALID_STYLE:
-            raise ValidationError("invalid style", field="style", reason="invalid enum value")
-        if template not in VALID_TEMPLATE:
-            raise ValidationError("invalid template", field="template", reason="invalid enum value")
 
-    def _make_chunks(self, topic: str, keywords: List[str], difficulty: str, style: str, llm_text: str) -> List[Chunk]:
+    def _make_chunks(self, topic: str, keywords: List[str], llm_text: str) -> List[Chunk]:
         key_text = ", ".join(keywords[:3]) if keywords else "核心概念"
-        depth = {"beginner": "直观理解", "intermediate": "机制理解", "advanced": "工程细节"}[difficulty]
         base = llm_text[:180].replace("\n", " ").strip()
         return [
-            Chunk(id=f"ck_{uuid4().hex[:8]}", title=f"{topic} 是什么", content=f"[{style}] {depth}：{topic} 的核心是 {key_text}。{base}", order_no=1),
-            Chunk(id=f"ck_{uuid4().hex[:8]}", title=f"{topic} 的关键机制", content=f"[{style}] 拆解关键机制与常见误区。", order_no=2),
-            Chunk(id=f"ck_{uuid4().hex[:8]}", title=f"{topic} 的实践建议", content=f"[{style}] 给出实践路径和下一步建议。", order_no=3),
+            Chunk(id=f"ck_{uuid4().hex[:8]}", title=f"{topic} 是什么", content=f"{topic} 的核心是 {key_text}。{base}", order_no=1),
+            Chunk(id=f"ck_{uuid4().hex[:8]}", title=f"{topic} 的关键机制", content="拆解关键机制与常见误区。", order_no=2),
+            Chunk(id=f"ck_{uuid4().hex[:8]}", title=f"{topic} 的实践建议", content="给出实践路径和下一步建议。", order_no=3),
         ]
 
     def _fallback_outline(self, topic: str) -> List[dict]:
@@ -1048,6 +1057,11 @@ def build_services() -> Dict[str, object]:
     event_store = EventMetricStore()
     knowledge_store = KnowledgeDocStore(config.knowledge_doc_dir)
 
+    # RAG components
+    embedding_client = EmbeddingClient(config)
+    vector_store = VectorStore(config)
+    rag_service = RAGService(config, vector_store)
+
     coursewares = InMemoryCoursewareRepo()
     jobs = InMemoryJobRepo()
     answers = InMemoryAnswerRepo()
@@ -1063,7 +1077,10 @@ def build_services() -> Dict[str, object]:
 
     return {
         "config": config,
-        "generation": GenerationService(coursewares, jobs, assets, llm, event_store, knowledge_store),
+        "generation": GenerationService(
+            coursewares, jobs, assets, llm, event_store, knowledge_store,
+            config=config, embedding_client=embedding_client, rag_service=rag_service,
+        ),
         "courseware": CoursewareService(coursewares, event_store, knowledge_store),
         "qa": QAService(coursewares, answers, llm, event_store),
         "chat": ChatService(sessions, messages, llm, event_store),
@@ -1073,6 +1090,9 @@ def build_services() -> Dict[str, object]:
         "retrieval_settings": retrieval_settings,
         "profile": profile_service,
         "monitoring": MonitoringService(event_store),
+        "rag": rag_service,
+        "vector_store": vector_store,
+        "embedding": embedding_client,
         "repos": {
             "coursewares": coursewares,
             "jobs": jobs,

@@ -45,13 +45,10 @@ class AriadneAPI:
 
     def generate_courseware(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            # MVP mode: advanced generation knobs are intentionally fixed.
             job, courseware = self.generation.generate(
                 topic=payload.get("topic", ""),
                 keywords=[],
-                difficulty="beginner",
-                style="engineering",
-                template="tutorial",
+                asset_ids=payload.get("asset_ids", []),
             )
             return self._ok({"job_id": job.id, "courseware_id": courseware.id, "phase": job.phase.value})
         except AriadneError as exc:
@@ -86,9 +83,6 @@ class AriadneAPI:
                 "id": cw.id,
                 "topic": cw.topic,
                 "status": cw.status,
-                "difficulty": cw.difficulty,
-                "style": cw.style,
-                "template": cw.template,
                 "current_version": cw.current_version,
                 "knowledge_doc_path": cw.knowledge_doc_path,
                 "knowledge_markdown": cw.knowledge_markdown,
