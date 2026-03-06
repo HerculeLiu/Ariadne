@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import asdict
 from typing import Any, Dict
 from uuid import uuid4
@@ -31,7 +29,6 @@ class AriadneAPI:
         self.profile = services["profile"]
         self.monitoring = services["monitoring"]
         self.repos = services["repos"]
-        self.llm = services["generation"].llm  # Access llm through generation service
 
     def _trace_id(self) -> str:
         return f"tr_{uuid4().hex[:10]}"
@@ -204,11 +201,6 @@ class AriadneAPI:
 
     def create_chat_session(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            existing_session_id = payload.get("session_id", "")
-            if existing_session_id:
-                session = self.chat.get_session(existing_session_id)
-                messages = [asdict(m) for m in self.chat.list_messages(existing_session_id)]
-                return self._ok({"session": asdict(session), "messages": messages})
             session = self.chat.create_session(
                 courseware_id=payload.get("courseware_id", ""),
                 page_id=payload.get("page_id", ""),
@@ -234,7 +226,7 @@ class AriadneAPI:
     def list_chat_sessions(self, courseware_id: str | None, page_id: str | None) -> Dict[str, Any]:
         try:
             sessions = [asdict(s) for s in self.chat.list_sessions(courseware_id=courseware_id, page_id=page_id)]
-            return self._ok({"sessions": sessions})
+            return self._ok(sessions)
         except AriadneError as exc:
             return self._error(exc)
 
@@ -321,202 +313,3 @@ class AriadneAPI:
         if not asset:
             return False
         return asset.status == AssetStatus.READY
-
-    def analyze_intent(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """意图识别：判断是否需要修改 chunks，返回修改建议
-
-        Args:
-            payload: {
-                "message": str,           # 用户消息/意图
-                "chunks": List[dict],     # 已选 chunks
-                "explicit_mode": bool     # 是否显式模式
-            }
-
-        Returns:
-            {
-                "is_modification": bool,
-                "chat_reply": str | None,
-                "chunks": [
-                    {
-                        "key": str,
-                        "label": str,
-                        "should_modify": bool,
-                        "reason": str,
-                        "new_title": str,
-                        "rewritten_content": str
-                    }
-                ]
-            }
-        """
-        try:
-            message = payload.get("message", "")
-            chunks = payload.get("chunks", [])
-            explicit_mode = payload.get("explicit_mode", False)
-
-            if not chunks:
-                return self._ok({
-                    "is_modification": False,
-                    "chat_reply": "请先选择要修改的 chunks"
-                })
-
-            if not message:
-                return self._ok({
-                    "is_modification": False,
-                    "chat_reply": "请描述你的修改意图"
-                })
-
-            # 选择 prompt
-            if explicit_mode:
-                system_prompt = self.llm.prompts.get("intent_edit_explicit.md")
-            else:
-                system_prompt = self.llm.prompts.get("intent_edit_implicit.md")
-
-            if not system_prompt:
-                return self._ok({
-                    "is_modification": False,
-                    "chat_reply": "意图识别服务暂不可用"
-                })
-
-            # 构建用户 prompt
-            chunks_text = "\n\n".join([
-                f"**Chunk {i+1}**\nKey: {c.get('key', '')}\nLabel: {c.get('label', '')}\nTitle: {c.get('title', '')}\n内容: {c.get('content', '')[:500]}..."
-                for i, c in enumerate(chunks)
-            ])
-
-            user_prompt = f"""用户消息: {message}
-
-已选 Chunks:
-{chunks_text}"""
-
-            # 调用 LLM
-            response = self.llm._chat([
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ])
-
-            # 解析 JSON 响应
-            result = self._parse_json_response(response)
-            return self._ok(result)
-        except AriadneError as exc:
-            return self._error(exc)
-        except Exception as exc:
-            logger.exception("analyze_intent error")
-            return self._ok({
-                "is_modification": False,
-                "chat_reply": f"意图识别失败: {str(exc)}"
-            })
-
-    def _parse_json_response(self, response: str) -> Dict[str, Any]:
-        """解析 LLM 返回的 JSON 响应"""
-        # 尝试提取 JSON 代码块
-        json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
-        if json_match:
-            response = json_match.group(1)
-        else:
-            # 尝试提取纯 JSON
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                response = json_match.group(0)
-
-        try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            # 解析失败，返回默认响应
-            return {
-                "is_modification": False,
-                "chat_reply": response,
-                "chunks": []
-            }
-
-    def apply_chunk_modification(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """应用 chunk 修改
-
-        Args:
-            payload: {
-                "chunk_id": str,
-                "new_content": str,
-                "new_title": str | None,
-                "expected_version": int
-            }
-        """
-        try:
-            chunk_id = payload.get("chunk_id", "")
-            new_content = payload.get("new_content", "")
-            new_title = payload.get("new_title")
-            expected_version = payload.get("expected_version", 0)
-
-            if not chunk_id:
-                return self._error(NotFoundError("chunk_id is required"))
-            if not new_content:
-                return self._error(NotFoundError("new_content is required"))
-
-            # 找到 chunk
-            cw, chunk = self._find_chunk_by_key(chunk_id)
-            if expected_version != cw.current_version:
-                from ariadne.domain.errors import VersionConflictError
-                raise VersionConflictError("version mismatch", field="expected_version", reason="current version changed")
-
-            # 更新内容和标题
-            chunk.content = new_content
-            if new_title:
-                chunk.title = new_title
-
-            cw.current_version += 1
-
-            # 同步到 markdown
-            from ariadne.application.knowledge import chunks_to_markdown
-            cw.knowledge_markdown = chunks_to_markdown(topic=cw.topic, chunks=cw.chunks)
-            cw.knowledge_doc_path = self.courseware.knowledge_store.save(
-                cw.id, cw.knowledge_markdown, source_asset_ids=cw.source_asset_ids
-            )
-
-            # 保存到 repo
-            self.courseware.repo.save(cw)
-            self.courseware.event_store.add("chunk_modification_apply", {
-                "chunk_key": chunk_id,
-                "version": cw.current_version,
-                "title_updated": new_title is not None
-            })
-            logger.info("chunk modification applied key=%s version=%s", chunk_id, cw.current_version)
-
-            return self._ok({
-                "version": cw.current_version,
-                "outline_updated": new_title is not None
-            })
-        except AriadneError as exc:
-            return self._error(exc)
-        except Exception as exc:
-            logger.exception("apply_chunk_modification error")
-            return self._ok({
-                "error": str(exc)
-            })
-
-    def _find_chunk_by_key(self, chunk_key: str) -> tuple:
-        """根据 chunk_key (格式: "chapterIdx-chunkIdx") 找到 chunk
-
-        Returns:
-            (Courseware, Chunk) 元组
-        """
-        # chunk_key 格式是 "章节索引-chunk索引"
-        parts = chunk_key.split("-")
-        if len(parts) != 2:
-            raise NotFoundError(f"invalid chunk_key format: {chunk_key}")
-
-        try:
-            chapter_idx = int(parts[0])
-            chunk_idx = int(parts[1])
-        except ValueError:
-            raise NotFoundError(f"invalid chunk_key format: {chunk_key}")
-
-        # 遍历所有 courseware 找到对应的 chunk
-        for cw in self.courseware.repo.list_all():
-            # chunks 按 order_no 排序
-            sorted_chunks = sorted(cw.chunks, key=lambda x: x.order_no)
-
-            # 根据 chapter_idx 和 chunk_idx 定位 chunk
-            # 这里假设 chapter_idx 对应 chunk 在全局列表中的大致位置
-            if 0 <= chunk_idx < len(sorted_chunks):
-                chunk = sorted_chunks[chunk_idx]
-                return cw, chunk
-
-        raise NotFoundError(f"chunk not found: {chunk_key}")

@@ -39,11 +39,11 @@ from ariadne.domain.models import (
     utc_now_iso,
 )
 from ariadne.infrastructure.repositories import (
-    FileChatMessageRepo,
-    FileChatSessionRepo,
-    FileCoursewareRepo,
     InMemoryAnswerRepo,
     InMemoryAssetRepo,
+    InMemoryChatMessageRepo,
+    InMemoryChatSessionRepo,
+    InMemoryCoursewareRepo,
     InMemoryDraftRepo,
     InMemoryExportRepo,
     InMemoryJobRepo,
@@ -148,13 +148,13 @@ class ProfileService:
 class GenerationService:
     def __init__(
         self,
-        coursewares,
+        coursewares: InMemoryCoursewareRepo,
         jobs: InMemoryJobRepo,
         assets: InMemoryAssetRepo,
         llm: LLMAgent,
         event_store: EventMetricStore,
         knowledge_store: KnowledgeDocStore,
-        config=None,
+        config: AppConfig = None,
         embedding_client: EmbeddingClient = None,
         rag_service: RAGService = None,
     ) -> None:
@@ -192,7 +192,6 @@ class GenerationService:
             knowledge_doc_path="",
             source_asset_ids=asset_ids or [],
         )
-        courseware.outline = []
         job = GenerationJob(
             id=job_id,
             courseware_id=courseware_id,
@@ -293,7 +292,6 @@ class GenerationService:
                             }
                         )
                 total = len(tasks)
-                courseware.outline = outline_meta
                 self._update_job(
                     courseware_id,
                     phase=JobPhase.CHUNK_GENERATING,
@@ -331,7 +329,6 @@ class GenerationService:
                 courseware.knowledge_markdown = knowledge_md
                 courseware.knowledge_doc_path = self.knowledge_store.save(courseware_id=courseware_id, markdown_text=knowledge_md, source_asset_ids=courseware.source_asset_ids)
                 courseware.status = "ready"
-                self.coursewares.save(courseware)
                 self._update_job(
                     courseware_id,
                     phase=JobPhase.DONE,
@@ -388,7 +385,6 @@ class GenerationService:
                         }
                     )
             total = len(tasks)
-            courseware.outline = outline_meta
             self._update_job(
                 courseware_id,
                 phase=JobPhase.CHUNK_GENERATING,
@@ -473,12 +469,10 @@ class GenerationService:
             courseware.knowledge_markdown = knowledge_md
             courseware.knowledge_doc_path = self.knowledge_store.save(courseware_id=courseware_id, markdown_text=knowledge_md, source_asset_ids=courseware.source_asset_ids)
             courseware.status = "ready"
-            self.coursewares.save(courseware)
             self._update_job(courseware_id, phase=JobPhase.DONE, progress=100, message="courseware ready")
             logger.info("generate done courseware_id=%s chunks=%s failed=%s", courseware_id, len(chunks_sorted), failed)
         except Exception as exc:  # noqa: BLE001
             courseware.status = "failed"
-            self.coursewares.save(courseware)
             self._update_job(
                 courseware_id,
                 phase=JobPhase.FAILED,
@@ -703,7 +697,7 @@ class GenerationService:
 
 
 class CoursewareService:
-    def __init__(self, repo, event_store: EventMetricStore, knowledge_store: KnowledgeDocStore) -> None:
+    def __init__(self, repo: InMemoryCoursewareRepo, event_store: EventMetricStore, knowledge_store: KnowledgeDocStore) -> None:
         self.repo = repo
         self.event_store = event_store
         self.knowledge_store = knowledge_store
@@ -715,7 +709,7 @@ class CoursewareService:
             asset_ids = self.knowledge_store.get_source_asset_ids(cw.id)
             if asset_ids:
                 cw.source_asset_ids = asset_ids
-                self.repo.save(cw)
+                self.repo.save(cw)  # Update in-memory courseware
         return cw
 
     def get(self, courseware_id: str) -> Courseware | None:
@@ -828,7 +822,7 @@ class CoursewareService:
         return {"version": cw.current_version}
 
     def undo_latest(self, page_id: str, expected_version: int) -> dict:
-        for cw in self.repo.list_all():
+        for cw in self.repo._items.values():  # noqa: SLF001
             if cw.current_version != expected_version:
                 continue
             cw.current_version -= 1
@@ -867,7 +861,7 @@ class CoursewareService:
         cw.knowledge_doc_path = self.knowledge_store.save(cw.id, cw.knowledge_markdown, source_asset_ids=cw.source_asset_ids)
 
     def _find_chunk(self, chunk_id: str) -> Tuple[Courseware, Chunk]:
-        for cw in self.repo.list_all():
+        for cw in self.repo._items.values():  # noqa: SLF001
             for ck in cw.chunks:
                 if ck.id == chunk_id:
                     return cw, ck
@@ -877,7 +871,7 @@ class CoursewareService:
 class QAService:
     def __init__(
         self,
-        coursewares,
+        coursewares: InMemoryCoursewareRepo,
         answers: InMemoryAnswerRepo,
         llm: LLMAgent,
         event_store: EventMetricStore,
@@ -957,7 +951,7 @@ class QAService:
         return answer
 
     def _find_chunk(self, chunk_id: str) -> Tuple[Courseware, Chunk]:
-        for cw in self.repo.list_all():
+        for cw in self.repo._items.values():  # noqa: SLF001
             for ck in cw.chunks:
                 if ck.id == chunk_id:
                     return cw, ck
@@ -967,8 +961,8 @@ class QAService:
 class ChatService:
     def __init__(
         self,
-        sessions,
-        messages,
+        sessions: InMemoryChatSessionRepo,
+        messages: InMemoryChatMessageRepo,
         llm: LLMAgent,
         event_store: EventMetricStore,
         rag_service: "RAGService" = None,
@@ -1093,21 +1087,11 @@ class ChatService:
     def list_sessions(self, courseware_id: str | None, page_id: str | None) -> List[ChatSession]:
         return self.sessions.list(courseware_id=courseware_id, page_id=page_id)
 
-    def get_session(self, session_id: str) -> ChatSession:
-        session = self.sessions.get(session_id)
-        if not session:
-            raise NotFoundError("chat session not found")
-        return session
-
-    def list_messages(self, session_id: str) -> List[ChatMessage]:
-        session = self.get_session(session_id)
-        return self.messages.list_by_session(session.id)
-
 
 class RewriteService:
     def __init__(
         self,
-        coursewares,
+        coursewares: InMemoryCoursewareRepo,
         drafts: InMemoryDraftRepo,
         llm: LLMAgent,
         event_store: EventMetricStore,
@@ -1148,7 +1132,7 @@ class RewriteService:
         return draft
 
     def _find_chunk(self, chunk_id: str) -> Tuple[Courseware, Chunk]:
-        for cw in self.coursewares.list_all():
+        for cw in self.coursewares._items.values():  # noqa: SLF001
             for ck in cw.chunks:
                 if ck.id == chunk_id:
                     return cw, ck
@@ -1377,7 +1361,7 @@ class AssetService:
 class ExportService:
     def __init__(
         self,
-        coursewares,
+        coursewares: InMemoryCoursewareRepo,
         exports: InMemoryExportRepo,
         event_store: EventMetricStore,
         knowledge_store: KnowledgeDocStore,
@@ -1460,19 +1444,13 @@ def build_services() -> Dict[str, object]:
     vector_store = VectorStore(config)
     rag_service = RAGService(config, vector_store, embedding_client)
 
-    coursewares = FileCoursewareRepo(
-        base_dir=config.courseware_storage_dir,
-        index_path=str(Path(config.storage_index_dir) / "coursewares.json"),
-    )
+    coursewares = InMemoryCoursewareRepo()
     jobs = InMemoryJobRepo()
     answers = InMemoryAnswerRepo()
     assets = InMemoryAssetRepo()
     exports = InMemoryExportRepo()
-    sessions = FileChatSessionRepo(
-        base_dir=config.courseware_storage_dir,
-        index_path=str(Path(config.storage_index_dir) / "chat_sessions.json"),
-    )
-    messages = FileChatMessageRepo(sessions)
+    sessions = InMemoryChatSessionRepo()
+    messages = InMemoryChatMessageRepo()
     drafts = InMemoryDraftRepo()
     profiles = InMemoryProfileRepo()
 
