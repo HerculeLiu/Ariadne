@@ -567,6 +567,75 @@
       border-radius: 5px;
     }}
     .chat-selected-remove:hover {{ background: #f9ead4; }}
+    .chat-files {{
+      display: none;
+      padding: 8px 10px;
+      background: #fffdf8;
+      border-bottom: 1px solid var(--line);
+      max-height: 180px;
+      overflow-y: auto;
+    }}
+    .chat-files.has-files {{ display: block; }}
+    .chat-file-item {{
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border: 1px solid #d9d1c5;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #fffaf2, #f7f2e7);
+      margin-bottom: 6px;
+      font-size: 12px;
+    }}
+    .chat-file-item:last-child {{ margin-bottom: 0; }}
+    .chat-file-icon {{
+      width: 18px;
+      height: 18px;
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+    }}
+    .chat-file-icon svg {{ width: 14px; height: 14px; }}
+    .chat-file-info {{ display: flex; flex-direction: column; gap: 2px; min-width: 0; }}
+    .chat-file-name {{
+      font-weight: 500;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }}
+    .chat-file-status {{ font-size: 11px; color: var(--muted); }}
+    .chat-file-status.uploading {{ color: #c4873a; }}
+    .chat-file-status.processing {{ color: #2f7ab0; }}
+    .chat-file-status.ready {{ color: #3f8c5a; }}
+    .chat-file-status.error {{ color: #c44a3a; }}
+    .chat-file-remove {{
+      width: 18px;
+      height: 18px;
+      border: 1px solid #cbb8a0;
+      border-radius: 6px;
+      background: rgba(255, 249, 239, 0.8);
+      color: #6f5a3a;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      padding: 0;
+    }}
+    .chat-file-remove:hover {{ background: #f4ead8; }}
+    .chat-file-spinner {{
+      width: 12px;
+      height: 12px;
+      border: 2px solid #e8dcc8;
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: fileSpin 0.8s linear infinite;
+    }}
+    @keyframes fileSpin {{
+      to {{ transform: rotate(360deg); }}
+    }}
     .chat-input textarea {{
       min-height: 66px; max-height: 132px; resize: none; border: 1px solid #d9ccb8; border-radius: 10px;
       padding: 8px 9px; font-size: 13px; font-family: inherit; color: #2e3941; background: #fff;
@@ -676,6 +745,7 @@
     <div id='chatList' class='chat-list'>
       <div class='msg assistant'>Hi, I am ready. Ask me anything.</div>
     </div>
+    <div id='chatFiles' class='chat-files'></div>
     <div id='chatSelected' class='chat-selected'></div>
     <div class='chat-tools'>
       <button id='chatUploadBtn' class='chat-tool' title='Upload File' aria-label='Upload File' data-tip='上传文件'>
@@ -685,7 +755,7 @@
           <path d='M12 3v12'></path>
         </svg>
       </button>
-      <input id='chatUploadInput' type='file' style='display:none' accept='.pdf,.md,.txt,.doc,.docx,.ppt,.pptx,.csv,.json,.py,.js,.ts,.html,.css'>
+      <input id='chatUploadInput' type='file' multiple style='display:none' accept='.pdf,.md,.txt,.docx'>
     </div>
     <div class='chat-input'>
       <textarea id='chatInput' placeholder='Ask anything...'></textarea>
@@ -698,7 +768,7 @@
     const RENDER_CONFIG = {config_json};
     const state = {{ chapterIdx: 0, chunkIdx: 0 }};
     const inspectState = {{ active: false, hoverEl: null, selectedMeta: null }};
-    const chatState = {{ sessionId: '', sending: false, selectedChunks: [], historyOpen: false, sessions: [] }};
+    const chatState = {{ sessionId: '', sending: false, selectedChunks: [], historyOpen: false, sessions: [], uploadedFiles: [] }};
     const $ = (id) => document.getElementById(id);
     function showContentFallback(reason) {{
       const fallback = $('renderFallbackCard');
@@ -908,14 +978,14 @@
       const box = $('chatInput');
       const btn = $('chatSendBtn');
       const text = (box && box.value ? box.value : '').trim();
-      if (!text && !chatState.selectedChunks.length) return;
+      if (!text) return;  // Require user to enter a question
 
       const chunksToUse = [...chatState.selectedChunks];
 
-      const selectedPayload = chunksToUse
+      // Build selected_context separately from message
+      const selectedContext = chunksToUse
         .map((x) => `[${{x.label}}]\\n${{x.content}}`)
         .join('\\n\\n');
-      const message = [selectedPayload, text].filter(Boolean).join('\\n\\n');
 
       appendChat('user', text, chunksToUse);
 
@@ -925,9 +995,20 @@
       if (btn) btn.disabled = true;
       try {{
         const sessionId = await ensureChatSession();
+        const assetIds = getReadyAssetIds();
+        const requestBody = {{
+          session_id: sessionId,
+          message: text,  // Only user's question, without chunk content
+        }};
+        if (selectedContext) {{
+          requestBody.selected_context = selectedContext;
+        }}
+        if (assetIds.length > 0) {{
+          requestBody.asset_ids = assetIds;
+        }}
         const data = await apiJson('/api/v1/chat/messages', {{
           method: 'POST',
-          body: JSON.stringify({{ session_id: sessionId, message }}),
+          body: JSON.stringify(requestBody),
         }});
         if (data.code !== 0) {{
           appendChat('assistant', `Request failed: ${{data.message || 'unknown error'}}`);
@@ -943,25 +1024,133 @@
     }}
     async function uploadChatFile(file) {{
       if (!file) return;
-      appendChat('user', `[file] ${{file.name}}`);
+      const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      const fileData = {{
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        assetId: '',
+        status: 'uploading',
+        statusText: '上传中...',
+      }};
+      chatState.uploadedFiles.push(fileData);
+      renderFileList();
       try {{
-        const up = await apiJson('/api/v1/assets/upload', {{
+        // Use FormData for multipart file upload
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/v1/assets/upload', {{
           method: 'POST',
-          body: JSON.stringify({{ file_name: file.name, size_bytes: file.size }}),
+          body: formData,
         }});
+        const up = await response.json();
+
         if (up.code !== 0) {{
-          appendChat('assistant', `Upload failed: ${{up.message || 'unknown error'}}`);
+          fileData.status = 'error';
+          fileData.statusText = '上传失败: ' + (up.message || 'unknown error');
+          renderFileList();
           return;
         }}
         const assetId = up.data && up.data.asset_id ? up.data.asset_id : '';
         if (!assetId) {{
-          appendChat('assistant', 'Upload failed: missing asset id');
+          fileData.status = 'error';
+          fileData.statusText = '上传失败: missing asset id';
+          renderFileList();
           return;
         }}
-        appendChat('assistant', `Uploaded: ${{file.name}} (asset_id=${{assetId}})`);
+        fileData.assetId = assetId;
+        const uploadStatus = up.data.status;
+        if (uploadStatus === 'ready') {{
+          fileData.status = 'ready';
+          fileData.statusText = '已就绪';
+        }} else {{
+          fileData.status = 'processing';
+          fileData.statusText = '处理中...';
+          pollAssetStatus(assetId, fileId);
+        }}
+        renderFileList();
       }} catch (err) {{
-        appendChat('assistant', `Upload failed: ${{err && err.message ? err.message : String(err)}}`);
+        fileData.status = 'error';
+        fileData.statusText = '上传失败: ' + (err && err.message ? err.message : String(err));
+        renderFileList();
       }}
+    }}
+    async function pollAssetStatus(assetId, fileId) {{
+      const maxAttempts = 120;
+      let attempts = 0;
+      const poll = async () => {{
+        if (attempts >= maxAttempts) {{
+          const fileData = chatState.uploadedFiles.find(f => f.id === fileId);
+          if (fileData) {{
+            fileData.status = 'error';
+            fileData.statusText = '分析超时';
+            renderFileList();
+          }}
+          return;
+        }}
+        attempts++;
+        try {{
+          const res = await apiJson(`/api/v1/assets/${{assetId}}/parse-status`);
+          const fileData = chatState.uploadedFiles.find(f => f.id === fileId);
+          if (!fileData) return;
+          if (res.code === 0 && res.data) {{
+            const status = res.data.status;
+            if (status === 'ready') {{
+              fileData.status = 'ready';
+              fileData.statusText = '已就绪';
+              renderFileList();
+            }} else if (status === 'failed') {{
+              fileData.status = 'error';
+              fileData.statusText = res.data.error || '分析失败';
+              renderFileList();
+            }} else {{
+              setTimeout(poll, 2000);
+            }}
+          }} else {{
+            setTimeout(poll, 2000);
+          }}
+        }} catch (err) {{
+          setTimeout(poll, 2000);
+        }}
+      }};
+      poll();
+    }}
+    function renderFileList() {{
+      const panel = $('chatFiles');
+      if (!panel) return;
+      if (!chatState.uploadedFiles.length) {{
+        panel.classList.remove('has-files');
+        panel.innerHTML = '';
+        return;
+      }}
+      panel.classList.add('has-files');
+      panel.innerHTML = chatState.uploadedFiles.map(f => {{
+        const isProcessing = f.status === 'uploading' || f.status === 'processing';
+        const statusClass = f.status;
+        return `
+        <div class='chat-file-item'>
+          <div class='chat-file-icon'>
+            ${{isProcessing ? '<div class="chat-file-spinner"></div>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>'}}
+          </div>
+          <div class='chat-file-info'>
+            <div class='chat-file-name'>${{esc(f.name)}}</div>
+            <div class='chat-file-status ${{statusClass}}'>${{esc(f.statusText)}}</div>
+          </div>
+          <button class='chat-file-remove' type='button' onclick="removeUploadedFile('${{esc(f.id)}}')" title='移除'>×</button>
+        </div>
+        `;
+      }}).join('');
+    }}
+    function removeUploadedFile(fileId) {{
+      chatState.uploadedFiles = chatState.uploadedFiles.filter(f => f.id !== fileId);
+      renderFileList();
+    }}
+    window.removeUploadedFile = removeUploadedFile;
+    function getReadyAssetIds() {{
+      return chatState.uploadedFiles
+        .filter(f => f.status === 'ready')
+        .map(f => f.assetId);
     }}
 
     function flatCount() {{
@@ -1530,8 +1719,10 @@
     if (chatUploadBtn && chatUploadInput) {{
       chatUploadBtn.addEventListener('click', () => chatUploadInput.click());
       chatUploadInput.addEventListener('change', async () => {{
-        const f = chatUploadInput.files && chatUploadInput.files[0];
-        await uploadChatFile(f);
+        const files = Array.from(chatUploadInput.files || []);
+        for (const f of files) {{
+          await uploadChatFile(f);
+        }}
         chatUploadInput.value = '';
       }});
     }}

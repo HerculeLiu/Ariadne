@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple
 from uuid import uuid4
 
 from ariadne.application.config import load_config
+from ariadne.application.file_parser import FileParserService, _flush_logs
 from ariadne.application.knowledge import KnowledgeDocStore, chunks_to_markdown, markdown_to_chunks, markdown_to_html
 from ariadne.domain.errors import (
     FileSizeLimitError,
@@ -54,7 +55,7 @@ from ariadne.llm.embedding_client import EmbeddingClient
 from ariadne.application.rag_service import RAGService, make_fragment_id
 from ariadne.infrastructure.vector_store import VectorStore
 
-ALLOWED_FILE_TYPES = {"pdf", "md", "txt"}
+ALLOWED_FILE_TYPES = {"pdf", "md", "txt", "docx"}
 VALID_UNDERSTAND = {"unknown", "understood", "not_understood"}
 logger = get_logger("services")
 
@@ -189,6 +190,7 @@ class GenerationService:
             chunks=[],
             knowledge_markdown="",
             knowledge_doc_path="",
+            source_asset_ids=asset_ids or [],
         )
         job = GenerationJob(
             id=job_id,
@@ -265,7 +267,7 @@ class GenerationService:
             return
         try:
             self._update_job(courseware_id, phase=JobPhase.RETRIEVING, progress=5, message="materials collected")
-            material_lines = self._collect_material_lines()
+            material_lines = self._collect_material_lines(asset_ids)  # Only show assets used for this generation
             topic_norm = (topic or "").strip().lower()
             example_mode = topic_norm == "test"
 
@@ -325,7 +327,7 @@ class GenerationService:
                 knowledge_md = self._build_markdown_from_outline(page_title, outline, chunks_sorted, material_lines)
                 courseware.chunks = chunks_sorted
                 courseware.knowledge_markdown = knowledge_md
-                courseware.knowledge_doc_path = self.knowledge_store.save(courseware_id=courseware_id, markdown_text=knowledge_md)
+                courseware.knowledge_doc_path = self.knowledge_store.save(courseware_id=courseware_id, markdown_text=knowledge_md, source_asset_ids=courseware.source_asset_ids)
                 courseware.status = "ready"
                 self._update_job(
                     courseware_id,
@@ -338,7 +340,25 @@ class GenerationService:
                 return
 
             self._update_job(courseware_id, phase=JobPhase.OUTLINE, progress=15, message="generating outline")
-            outline_md = self.llm.generate_outline_markdown(topic, keywords).strip()
+
+            # RAG retrieval for outline generation - use uploaded files to inform structure
+            outline_rag_context = ""
+            if asset_ids and self.rag_service and self.embedding_client:
+                try:
+                    query_embedding = self.embedding_client.encode_single(topic)
+                    results = self.rag_service.retrieve(
+                        query=topic,
+                        query_embedding=query_embedding,
+                        top_k=5,
+                        asset_ids=asset_ids,
+                    )
+                    if results:
+                        outline_rag_context = self.rag_service.format_context_for_prompt(results, max_length=6000)
+                        logger.info("RAG context for outline: %d chars, %d results", len(outline_rag_context), len(results))
+                except Exception as exc:
+                    logger.warning("RAG retrieval failed for outline: %s", exc)
+
+            outline_md = self.llm.generate_outline_markdown(topic, keywords, rag_context=outline_rag_context).strip()
             outline = self._parse_outline_markdown(outline_md)
             if not outline:
                 # fallback for unstable outline responses
@@ -447,7 +467,7 @@ class GenerationService:
             knowledge_md = self._build_markdown_from_outline(topic, outline, chunks_sorted, material_lines)
             courseware.chunks = chunks_sorted
             courseware.knowledge_markdown = knowledge_md
-            courseware.knowledge_doc_path = self.knowledge_store.save(courseware_id=courseware_id, markdown_text=knowledge_md)
+            courseware.knowledge_doc_path = self.knowledge_store.save(courseware_id=courseware_id, markdown_text=knowledge_md, source_asset_ids=courseware.source_asset_ids)
             courseware.status = "ready"
             self._update_job(courseware_id, phase=JobPhase.DONE, progress=100, message="courseware ready")
             logger.info("generate done courseware_id=%s chunks=%s failed=%s", courseware_id, len(chunks_sorted), failed)
@@ -462,11 +482,21 @@ class GenerationService:
             )
             logger.exception("generation failed courseware_id=%s", courseware_id)
 
-    def _collect_material_lines(self) -> List[str]:
+    def _collect_material_lines(self, asset_ids: List[str] | None) -> List[str]:
+        """Collect material reference lines for the specified assets only."""
         lines: List[str] = []
-        for asset in self.assets._items.values():  # noqa: SLF001
-            if asset.status == AssetStatus.READY:
-                lines.append(f"- {asset.file_name} ({asset.file_type})")
+        seen: set[str] = set()
+
+        for asset_id in asset_ids or []:
+            asset = self.assets.get(asset_id)
+            if not asset or asset.status != AssetStatus.READY:
+                continue
+            label = f"- {asset.file_name} ({asset.file_type})"
+            if label in seen:
+                continue  # Deduplicate by filename + type
+            seen.add(label)
+            lines.append(label)
+
         return lines
 
     def _validate(self, topic: str, keywords: List[str]) -> None:
@@ -681,8 +711,59 @@ class CoursewareService:
         self.event_store = event_store
         self.knowledge_store = knowledge_store
 
-    def list_chunks(self, courseware_id: str, include_content: bool = True, only_favorite: bool = False) -> List[dict]:
+    def _ensure_metadata(self, cw: Courseware) -> Courseware:
+        """Restore source_asset_ids from persistent storage if not already set."""
+        if not cw.source_asset_ids:
+            # Try to load from metadata file
+            asset_ids = self.knowledge_store.get_source_asset_ids(cw.id)
+            if asset_ids:
+                cw.source_asset_ids = asset_ids
+                self.repo.save(cw)  # Update in-memory courseware
+        return cw
+
+    def get(self, courseware_id: str) -> Courseware | None:
+        """Get courseware with restored metadata. Reconstructs from disk if not in memory."""
         cw = self.repo.get(courseware_id)
+        if cw:
+            return self._ensure_metadata(cw)
+
+        # Repo miss - try to reconstruct from disk
+        markdown = self.knowledge_store.load(courseware_id)
+        if not markdown:
+            return None
+
+        # Parse markdown to get chunks
+        chunks = markdown_to_chunks(markdown)
+
+        # Extract topic from markdown (first # heading)
+        topic = courseware_id
+        for line in markdown.splitlines():
+            if line.strip().startswith("# "):
+                topic = line.strip()[2:].strip()
+                break
+
+        # Load source_asset_ids from metadata
+        source_asset_ids = self.knowledge_store.get_source_asset_ids(courseware_id)
+
+        # Reconstruct courseware
+        from ariadne.domain.models import utc_now_iso
+        cw = Courseware(
+            id=courseware_id,
+            topic=topic,
+            created_at=utc_now_iso(),  # Fallback timestamp
+            status="ready",
+            knowledge_markdown=markdown,
+            knowledge_doc_path=str(self.knowledge_store.base_dir / f"{courseware_id}.md"),
+            chunks=chunks,
+            source_asset_ids=source_asset_ids,
+        )
+        self.repo.save(cw)
+        logger.info("Reconstructed courseware from disk id=%s chunks=%d source_assets=%d",
+                    courseware_id, len(chunks), len(source_asset_ids))
+        return cw
+
+    def list_chunks(self, courseware_id: str, include_content: bool = True, only_favorite: bool = False) -> List[dict]:
+        cw = self.get(courseware_id)  # Use get() to handle disk reconstruction
         if not cw:
             raise NotFoundError("courseware not found")
         rows = []
@@ -760,7 +841,7 @@ class CoursewareService:
         raise VersionConflictError("version mismatch", field="expected_version", reason="no matching page version")
 
     def get_markdown(self, courseware_id: str) -> dict:
-        cw = self.repo.get(courseware_id)
+        cw = self.get(courseware_id)
         if not cw:
             raise NotFoundError("courseware not found")
         text = self.knowledge_store.load(courseware_id)
@@ -769,7 +850,7 @@ class CoursewareService:
         return {"courseware_id": cw.id, "markdown": cw.knowledge_markdown, "path": cw.knowledge_doc_path}
 
     def update_markdown(self, courseware_id: str, markdown_text: str) -> dict:
-        cw = self.repo.get(courseware_id)
+        cw = self.get(courseware_id)
         if not cw:
             raise NotFoundError("courseware not found")
         if not markdown_text.strip():
@@ -778,7 +859,7 @@ class CoursewareService:
         cw.knowledge_markdown = markdown_text
         cw.chunks = markdown_to_chunks(markdown_text)
         cw.current_version += 1
-        cw.knowledge_doc_path = self.knowledge_store.save(courseware_id, markdown_text)
+        cw.knowledge_doc_path = self.knowledge_store.save(courseware_id, markdown_text, source_asset_ids=cw.source_asset_ids)
         self.repo.save(cw)
         self.event_store.add("markdown_update", {"courseware_id": courseware_id, "version": cw.current_version})
         logger.info("markdown updated courseware=%s version=%s path=%s", courseware_id, cw.current_version, cw.knowledge_doc_path)
@@ -794,7 +875,7 @@ class CoursewareService:
                 if line.startswith("## ") and not line.startswith("## 参考资料"):
                     break
         cw.knowledge_markdown = chunks_to_markdown(topic=cw.topic, chunks=cw.chunks, material_lines=material_lines)
-        cw.knowledge_doc_path = self.knowledge_store.save(cw.id, cw.knowledge_markdown)
+        cw.knowledge_doc_path = self.knowledge_store.save(cw.id, cw.knowledge_markdown, source_asset_ids=cw.source_asset_ids)
 
     def _find_chunk(self, chunk_id: str) -> Tuple[Courseware, Chunk]:
         for cw in self.repo._items.values():  # noqa: SLF001
@@ -805,22 +886,66 @@ class CoursewareService:
 
 
 class QAService:
-    def __init__(self, coursewares: InMemoryCoursewareRepo, answers: InMemoryAnswerRepo, llm: LLMAgent, event_store: EventMetricStore) -> None:
-        self.coursewares = coursewares
+    def __init__(
+        self,
+        coursewares: InMemoryCoursewareRepo,
+        answers: InMemoryAnswerRepo,
+        llm: LLMAgent,
+        event_store: EventMetricStore,
+        rag_service: "RAGService" = None,
+        embedding_client: "EmbeddingClient" = None,
+        courseware_service: "CoursewareService" = None,
+    ) -> None:
+        self.repo = coursewares  # Keep for _find_chunk
         self.answers = answers
         self.llm = llm
         self.event_store = event_store
+        self.rag_service = rag_service
+        self.embedding_client = embedding_client
+        self.courseware_service = courseware_service  # For metadata restoration
 
     def ask(self, chunk_id: str, question: str, page_id: str, selection: Dict[str, object] | None, mode: str) -> Answer:
         courseware, chunk = self._find_chunk(chunk_id)
+
+        # Restore metadata from persistent storage if available
+        if self.courseware_service:
+            courseware = self.courseware_service._ensure_metadata(courseware)
+
         if not question.strip():
             raise ValidationError("question is empty", field="question", reason="question is required")
         if mode not in {"brief", "deep"}:
             raise ValidationError("invalid mode", field="mode", reason="mode should be brief or deep")
 
         selection_text = str((selection or {}).get("text", "")).strip()
-        context = f"topic={courseware.topic};chunk={chunk.title};selection={selection_text}"
-        llm_text = self.llm.answer_chunk_question(context=context, question=question, mode=mode)
+
+        # Build context with chunk content and RAG
+        context_parts = [
+            f"topic={courseware.topic}",
+            f"chunk_title={chunk.title}",
+            f"chunk_content={chunk.content}",  # Include full chunk content
+        ]
+        if selection_text:
+            context_parts.append(f"selection={selection_text}")
+
+        # Add RAG context if courseware has source assets
+        rag_context = ""
+        if courseware.source_asset_ids and self.rag_service and self.embedding_client:
+            try:
+                query_embedding = self.embedding_client.encode_single(question)
+                results = self.rag_service.retrieve(
+                    query=question,
+                    query_embedding=query_embedding,
+                    top_k=3,
+                    asset_ids=courseware.source_asset_ids,
+                )
+                if results:
+                    rag_context = self.rag_service.format_context_for_prompt(results, max_length=4000)
+                    logger.debug("RAG context for QA: %d chars, %d results", len(rag_context), len(results))
+            except Exception as exc:
+                logger.warning("RAG retrieval failed for QA: %s", exc)
+
+        context = ";".join(context_parts)
+        llm_text = self.llm.answer_chunk_question(context=context, question=question, mode=mode, rag_context=rag_context if rag_context else None)
         answer_text = f"[{mode}] chunk({chunk.id}) {llm_text}"
 
         answer = Answer(
@@ -832,8 +957,8 @@ class QAService:
             sources=[Source(title=f"{courseware.topic} 来源", url="https://example.org/reference", domain="example.org")],
         )
         self.answers.save(answer)
-        self.event_store.add("ask", {"chunk_id": chunk.id, "page_id": page_id})
-        logger.info("qa answered chunk=%s mode=%s", chunk.id, mode)
+        self.event_store.add("ask", {"chunk_id": chunk.id, "page_id": page_id, "with_rag": bool(rag_context)})
+        logger.info("qa answered chunk=%s mode=%s with_rag=%s", chunk.id, mode, bool(rag_context))
         return answer
 
     def get_answer(self, answer_id: str) -> Answer:
@@ -843,7 +968,7 @@ class QAService:
         return answer
 
     def _find_chunk(self, chunk_id: str) -> Tuple[Courseware, Chunk]:
-        for cw in self.coursewares._items.values():  # noqa: SLF001
+        for cw in self.repo._items.values():  # noqa: SLF001
             for ck in cw.chunks:
                 if ck.id == chunk_id:
                     return cw, ck
@@ -851,11 +976,23 @@ class QAService:
 
 
 class ChatService:
-    def __init__(self, sessions: InMemoryChatSessionRepo, messages: InMemoryChatMessageRepo, llm: LLMAgent, event_store: EventMetricStore) -> None:
+    def __init__(
+        self,
+        sessions: InMemoryChatSessionRepo,
+        messages: InMemoryChatMessageRepo,
+        llm: LLMAgent,
+        event_store: EventMetricStore,
+        rag_service: "RAGService" = None,
+        embedding_client: "EmbeddingClient" = None,
+        courseware_service: "CoursewareService" = None,
+    ) -> None:
         self.sessions = sessions
         self.messages = messages
         self.llm = llm
         self.event_store = event_store
+        self.rag_service = rag_service
+        self.embedding_client = embedding_client
+        self.courseware_service = courseware_service
 
     def create_session(self, courseware_id: str, page_id: str, chunk_id: str) -> ChatSession:
         now = utc_now_iso()
@@ -872,18 +1009,83 @@ class ChatService:
         logger.info("chat session created id=%s", session.id)
         return session
 
-    def send_message(self, session_id: str, message: str, continue_from_message_id: str | None = None) -> Dict[str, object]:
+    def send_message(
+        self,
+        session_id: str,
+        message: str,
+        continue_from_message_id: str | None = None,
+        asset_ids: List[str] | None = None,
+        selected_context: str | None = None,
+    ) -> Dict[str, object]:
+        """
+        Send a chat message.
+
+        Args:
+            session_id: Chat session ID
+            message: User's question (without chunk content - used for RAG retrieval)
+            continue_from_message_id: Optional message to continue from
+            asset_ids: Asset IDs for RAG retrieval
+            selected_context: Optional selected chunk content (only sent to LLM, not used for RAG)
+        """
         session = self.sessions.get(session_id)
         if not session:
             raise NotFoundError("chat session not found")
         if not message.strip():
             raise ValidationError("message is empty", field="message", reason="required")
 
-        user_msg = ChatMessage(id=f"msg_{uuid4().hex[:8]}", session_id=session_id, role="user", content=message, created_at=utc_now_iso())
+        # Build the full message for storage (include selected context if provided)
+        full_message = f"{selected_context}\n\n{message}" if selected_context else message
+        user_msg = ChatMessage(id=f"msg_{uuid4().hex[:8]}", session_id=session_id, role="user", content=full_message, created_at=utc_now_iso())
         self.messages.save(user_msg)
+
+        # Determine which asset_ids to use for RAG
+        effective_asset_ids = asset_ids
+        if not effective_asset_ids and self.courseware_service:
+            # Fall back to courseware's source assets if available
+            courseware = self.courseware_service.get(session.courseware_id)
+            if courseware and courseware.source_asset_ids:
+                effective_asset_ids = courseware.source_asset_ids
+                logger.debug("Using courseware source_asset_ids: %s", effective_asset_ids)
+
+        # Build RAG context using ONLY the user's question (not selected_context)
+        rag_context = ""
+        if effective_asset_ids and self.rag_service and self.embedding_client:
+            try:
+                # Use message directly for RAG - no extraction needed since selected_context is separate
+                query_embedding = self.embedding_client.encode_single(message)
+                results = self.rag_service.retrieve(
+                    query=message,
+                    query_embedding=query_embedding,
+                    top_k=5,
+                    asset_ids=effective_asset_ids,
+                )
+                if results:
+                    rag_context = self.rag_service.format_context_for_prompt(results, max_length=8000)
+                    logger.debug("RAG context for chat: query='%s', %d chars, %d results", message[:100], len(rag_context), len(results))
+            except Exception as exc:
+                logger.warning("RAG retrieval failed for chat: %s", exc)
+
+        # Build context for LLM: combine selected_context + rag_context + message
+        context_parts = [
+            f"session={session_id}",
+            f"courseware={session.courseware_id}",
+            f"page={session.page_id}",
+            f"continue_from={continue_from_message_id or ''}",
+        ]
+        if rag_context:
+            context_parts.append(f"rag_context={rag_context[:500]}...")  # Log preview
+
+        # Build the full message for LLM: selected_context + rag_context + user question
+        llm_message = message
+        if selected_context:
+            llm_message = f"【选中的内容】\n{selected_context}\n\n【我的问题】\n{message}"
+        if rag_context:
+            llm_message = f"{llm_message}\n\n【参考资料】\n{rag_context}"
+
         llm_reply = self.llm.chat_reply(
-            context=f"session={session_id};courseware={session.courseware_id};page={session.page_id};continue_from={continue_from_message_id or ''}",
-            message=message,
+            context=";".join(context_parts),
+            message=llm_message,
+            rag_context=None,  # Already embedded in llm_message
         )
         assistant_msg = ChatMessage(
             id=f"msg_{uuid4().hex[:8]}",
@@ -895,8 +1097,8 @@ class ChatService:
         self.messages.save(assistant_msg)
         session.last_active_at = utc_now_iso()
         self.sessions.save(session)
-        self.event_store.add("chat_message", {"session_id": session_id})
-        logger.info("chat message processed session=%s", session_id)
+        self.event_store.add("chat_message", {"session_id": session_id, "with_rag": bool(rag_context)})
+        logger.info("chat message processed session=%s with_rag=%s", session_id, bool(rag_context))
         return {"reply": assistant_msg.content, "message_id": assistant_msg.id}
 
     def list_sessions(self, courseware_id: str | None, page_id: str | None) -> List[ChatSession]:
@@ -904,14 +1106,27 @@ class ChatService:
 
 
 class RewriteService:
-    def __init__(self, coursewares: InMemoryCoursewareRepo, drafts: InMemoryDraftRepo, llm: LLMAgent, event_store: EventMetricStore) -> None:
+    def __init__(
+        self,
+        coursewares: InMemoryCoursewareRepo,
+        drafts: InMemoryDraftRepo,
+        llm: LLMAgent,
+        event_store: EventMetricStore,
+        courseware_service: "CoursewareService" = None,
+    ) -> None:
         self.coursewares = coursewares
         self.drafts = drafts
         self.llm = llm
         self.event_store = event_store
+        self.courseware_service = courseware_service
 
     def create_draft(self, page_id: str, chunk_id: str, instruction: str) -> RewriteDraft:
         cw, chunk = self._find_chunk(chunk_id)
+
+        # Restore metadata from persistent storage if available
+        if self.courseware_service:
+            cw = self.courseware_service._ensure_metadata(cw)
+
         rewritten = self.llm.rewrite_chunk(original=chunk.content, instruction=instruction)
         draft = RewriteDraft(
             id=f"dr_{uuid4().hex[:8]}",
@@ -942,12 +1157,27 @@ class RewriteService:
 
 
 class AssetService:
-    def __init__(self, assets: InMemoryAssetRepo, max_file_size_bytes: int, event_store: EventMetricStore) -> None:
+    def __init__(
+        self,
+        assets: InMemoryAssetRepo,
+        max_file_size_bytes: int,
+        event_store: EventMetricStore,
+        storage_dir: str = None,
+        rag_service: "RAGService" = None,
+        config: "AppConfig" = None,
+    ) -> None:
         self.assets = assets
         self.max_file_size_bytes = max_file_size_bytes
         self.event_store = event_store
+        self.storage_dir = Path(storage_dir or "storage/assets")
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.rag_service = rag_service
+        self.config = config
+        self.parser = FileParserService()
+        self._processing_lock = threading.Lock()
 
     def upload(self, file_name: str, size_bytes: int) -> Asset:
+        """Legacy upload method - creates asset without actual file content."""
         ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
         if ext not in ALLOWED_FILE_TYPES:
             raise UnsupportedFileTypeError("unsupported file type", field="file", reason=f"extension {ext} not allowed")
@@ -968,6 +1198,175 @@ class AssetService:
         self.event_store.add("asset_upload", {"asset_id": asset.id, "file_name": file_name})
         logger.info("asset uploaded id=%s name=%s size=%s", asset.id, file_name, size_bytes)
         return asset
+
+    def upload_with_content(self, file_name: str, file_content: bytes, size_bytes: int) -> Asset:
+        """
+        Upload file with actual content and process it asynchronously.
+
+        Args:
+            file_name: Name of the uploaded file
+            file_content: Raw file content as bytes
+            size_bytes: Size of the file in bytes
+
+        Returns:
+            Created Asset (status will be PROCESSING initially)
+        """
+        ext = file_name.rsplit(".", 1)[-1].lower() if "." in file_name else ""
+        if ext not in ALLOWED_FILE_TYPES:
+            raise UnsupportedFileTypeError("unsupported file type", field="file", reason=f"extension {ext} not allowed")
+        if not file_content:
+            raise ValidationError("file content is empty", field="file", reason="content is required")
+        actual_size = len(file_content)
+        if actual_size != size_bytes:
+            size_bytes = actual_size
+        if size_bytes > self.max_file_size_bytes:
+            raise FileSizeLimitError("file too large", field="file", reason=f"size exceeds {self.max_file_size_bytes} bytes")
+
+        asset_id = f"as_{uuid4().hex[:8]}"
+
+        # Store file to disk
+        storage_path = self._store_file(asset_id, file_content, ext)
+
+        # Create asset with PROCESSING status
+        asset = Asset(
+            id=asset_id,
+            file_name=file_name,
+            file_type=ext,
+            size_bytes=size_bytes,
+            status=AssetStatus.PROCESSING,
+            progress=0,
+            storage_path=storage_path,
+        )
+        self.assets.save(asset)
+        self.event_store.add("asset_upload", {"asset_id": asset.id, "file_name": file_name, "with_content": True})
+        logger.info("asset uploaded with content id=%s name=%s size=%s path=%s", asset.id, file_name, size_bytes, storage_path)
+
+        # Start background processing
+        threading.Thread(
+            target=self._process_file_async,
+            args=(asset,),
+            daemon=True,
+        ).start()
+
+        return asset
+
+    def _store_file(self, asset_id: str, file_content: bytes, file_type: str) -> str:
+        """
+        Store file to local filesystem.
+
+        Args:
+            asset_id: Asset ID
+            file_content: File content as bytes
+            file_type: File extension
+
+        Returns:
+            Path where file was stored
+        """
+        # Create subdirectory by date for better organization
+        from datetime import datetime
+        date_dir = datetime.utcnow().strftime("%Y%m")
+        target_dir = self.storage_dir / date_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+
+        # Store file with asset_id as prefix
+        file_path = target_dir / f"{asset_id}.{file_type}"
+        file_path.write_bytes(file_content)
+        logger.debug("File stored: %s", file_path)
+        return str(file_path)
+
+    def _process_file_async(self, asset: Asset) -> None:
+        """
+        Process uploaded file asynchronously: parse -> split -> vectorize -> store.
+
+        Args:
+            asset: Asset to process
+        """
+        try:
+            with self._processing_lock:
+                # Update progress: parsing
+                asset.progress = 10
+                self.assets.save(asset)
+
+            # Parse file to extract text
+            logger.info("Processing asset %s: parsing file", asset.id)
+            text = self.parser.parse(asset.storage_path, asset.file_type)
+            if not text or not text.strip():
+                raise ValueError("Failed to extract text from file")
+
+            # Generate content preview
+            preview = self.parser.get_preview(text, max_length=500)
+            asset.content_preview = preview
+
+            with self._processing_lock:
+                asset.progress = 30
+                self.assets.save(asset)
+
+            # Split text into fragments (use pre-extracted text to avoid re-parsing)
+            import sys
+            print(f"[DEBUG-1] About to import split_fragments_from_pre_extracted_text")
+            sys.stdout.flush()
+
+            from ariadne.application.text_splitter import split_fragments_from_pre_extracted_text
+            print(f"[DEBUG-2] Import complete, about to call split function")
+            sys.stdout.flush()
+
+            logger.info("Processing asset %s: splitting text (chars=%d)", asset.id, len(text))
+            _flush_logs()
+
+            print(f"[DEBUG-3] About to call split_fragments_from_pre_extracted_text with asset_id={asset.id}")
+            sys.stdout.flush()
+
+            fragments = split_fragments_from_pre_extracted_text(asset.id, text)
+
+            print(f"[DEBUG-4] split_fragments_from_pre_extracted_text returned {len(fragments)} fragments")
+            sys.stdout.flush()
+            _flush_logs()
+            logger.debug("Asset %s: split_fragments_from_pre_extracted_text returned", asset.id)
+
+            if not fragments:
+                logger.warning("Asset %s: no fragments generated from text", asset.id)
+
+            asset.chunk_count = len(fragments)
+            logger.info("Processing asset %s: split into %d fragments", asset.id, len(fragments))
+            _flush_logs()
+
+            with self._processing_lock:
+                asset.progress = 50
+                self.assets.save(asset)
+
+            # Vectorize and store to ChromaDB
+            if self.rag_service:
+                logger.info("Processing asset %s: vectorizing %d fragments", asset.id, len(fragments))
+                count = self.rag_service.process_pre_split_fragments(fragments, asset.id)
+                logger.info("Processing asset %s: vectorized %d fragments", asset.id, count)
+            else:
+                logger.warning("RAG service not available, skipping vectorization for asset %s", asset.id)
+
+            # Mark as ready
+            with self._processing_lock:
+                asset.status = AssetStatus.READY
+                asset.progress = 100
+                self.assets.save(asset)
+
+            self.event_store.add("asset_processed", {
+                "asset_id": asset.id,
+                "file_name": asset.file_name,
+                "chunk_count": asset.chunk_count,
+            })
+            logger.info("Asset processing complete: id=%s chunks=%d", asset.id, asset.chunk_count)
+
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Asset processing failed: id=%s error=%s", asset.id, exc)
+            with self._processing_lock:
+                asset.status = AssetStatus.FAILED
+                asset.error = str(exc)
+                asset.progress = 0
+                self.assets.save(asset)
+            self.event_store.add("asset_failed", {
+                "asset_id": asset.id,
+                "file_name": asset.file_name,
+                "error": str(exc),
+            })
 
     def status(self, asset_id: str) -> Asset:
         asset = self.assets.get(asset_id)
@@ -1060,7 +1459,7 @@ def build_services() -> Dict[str, object]:
     # RAG components
     embedding_client = EmbeddingClient(config)
     vector_store = VectorStore(config)
-    rag_service = RAGService(config, vector_store)
+    rag_service = RAGService(config, vector_store, embedding_client)
 
     coursewares = InMemoryCoursewareRepo()
     jobs = InMemoryJobRepo()
@@ -1075,17 +1474,27 @@ def build_services() -> Dict[str, object]:
     retrieval_settings = RetrievalSettingsService()
     profile_service = ProfileService(profiles, local_only_default=config.local_only)
 
+    # Create CoursewareService first (needed by ChatService and QAService)
+    courseware_service = CoursewareService(coursewares, event_store, knowledge_store)
+
     return {
         "config": config,
         "generation": GenerationService(
             coursewares, jobs, assets, llm, event_store, knowledge_store,
             config=config, embedding_client=embedding_client, rag_service=rag_service,
         ),
-        "courseware": CoursewareService(coursewares, event_store, knowledge_store),
-        "qa": QAService(coursewares, answers, llm, event_store),
-        "chat": ChatService(sessions, messages, llm, event_store),
-        "rewrite": RewriteService(coursewares, drafts, llm, event_store),
-        "assets": AssetService(assets, config.max_file_size_mb * 1024 * 1024, event_store),
+        "courseware": courseware_service,
+        "qa": QAService(coursewares, answers, llm, event_store, rag_service=rag_service, embedding_client=embedding_client, courseware_service=courseware_service),
+        "chat": ChatService(sessions, messages, llm, event_store, rag_service=rag_service, embedding_client=embedding_client, courseware_service=courseware_service),
+        "rewrite": RewriteService(coursewares, drafts, llm, event_store, courseware_service=courseware_service),
+        "assets": AssetService(
+            assets,
+            config.max_file_size_mb * 1024 * 1024,
+            event_store,
+            storage_dir=config.asset_storage_dir if hasattr(config, 'asset_storage_dir') else None,
+            rag_service=rag_service,
+            config=config,
+        ),
         "export": ExportService(coursewares, exports, event_store, knowledge_store),
         "retrieval_settings": retrieval_settings,
         "profile": profile_service,

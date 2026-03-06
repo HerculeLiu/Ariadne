@@ -4,6 +4,8 @@ import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
+import cgi
 
 from ariadne.api.facade import AriadneAPI
 from ariadne.infrastructure.app_logger import get_logger
@@ -17,6 +19,9 @@ logger = get_logger("api.http")
 
 class AriadneHandler(BaseHTTPRequestHandler):
     api = AriadneAPI()
+
+    def _trace_id(self) -> str:
+        return f"tr_{uuid4().hex[:10]}"
 
     def _send_common_headers(self, content_type: str, content_length: int) -> None:
         self.send_header("Content-Type", content_type)
@@ -47,6 +52,78 @@ class AriadneHandler(BaseHTTPRequestHandler):
             return {}
         raw = self.rfile.read(length)
         return json.loads(raw.decode("utf-8"))
+
+    def _handle_multipart_file_upload(self):
+        """
+        Handle multipart/form-data file upload.
+
+        Returns:
+            dict with 'file_name', 'file_content', and 'size_bytes'
+        """
+        content_type = self.headers.get('Content-Type', '')
+        if not content_type.startswith('multipart/form-data'):
+            return None
+
+        # Parse the multipart boundary
+        boundary = None
+        for part in content_type.split(';'):
+            part = part.strip()
+            if part.startswith('boundary='):
+                boundary = part[len('boundary='):].strip('"')
+                break
+
+        if not boundary:
+            logger.warning("Multipart upload without boundary")
+            return None
+
+        # Read the request body
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0 or length > 50 * 1024 * 1024:  # 50MB limit
+            logger.warning("Invalid content length: %d", length)
+            return None
+
+        body = self.rfile.read(length)
+
+        # Parse multipart form data
+        boundary_bytes = ('--' + boundary).encode('utf-8')
+        parts = body.split(boundary_bytes)
+
+        file_name = None
+        file_content = None
+
+        for part in parts:
+            if b'Content-Disposition' not in part:
+                continue
+
+            # Extract headers and content
+            if b'\r\n\r\n' not in part:
+                continue
+
+            headers, content = part.split(b'\r\n\r\n', 1)
+            headers_str = headers.decode('utf-8', errors='ignore')
+
+            # Check if this is the file part
+            if 'name="file"' in headers_str or 'name="files[]"' in headers_str:
+                # Extract filename from Content-Disposition
+                import re
+                filename_match = re.search(r'filename="([^"]*)"', headers_str)
+                if filename_match:
+                    file_name = filename_match.group(1)
+
+                # Remove trailing \r\n from content
+                if content.endswith(b'\r\n'):
+                    content = content[:-2]
+                file_content = content
+                break
+
+        if file_name and file_content is not None:
+            return {
+                'file_name': file_name,
+                'file_content': file_content,
+                'size_bytes': len(file_content),
+            }
+
+        return None
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -130,6 +207,22 @@ class AriadneHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
+        content_type = self.headers.get('Content-Type', '')
+
+        # Check if this is a multipart file upload
+        if content_type.startswith('multipart/form-data') and path == "/api/v1/assets/upload":
+            file_data = self._handle_multipart_file_upload()
+            if file_data:
+                return self._send_json(
+                    self.api.upload_asset_with_content(
+                        file_data['file_name'],
+                        file_data['file_content'],
+                        file_data['size_bytes'],
+                    )
+                )
+            return self._send_json({"code": 10001, "message": "Invalid file upload", "trace_id": self._trace_id()}, status=400)
+
+        # Regular JSON requests
         payload = self._read_json()
         logger.debug("do_POST path=%s keys=%s", path, list(payload.keys()))
 

@@ -75,7 +75,7 @@ class AriadneAPI:
             return self._error(exc)
 
     def get_courseware(self, courseware_id: str) -> Dict[str, Any]:
-        cw = self.repos["coursewares"].get(courseware_id)
+        cw = self.courseware.get(courseware_id)  # Use courseware.get() for disk reconstruction
         if not cw:
             return self._error(NotFoundError("resource not found"))
         return self._ok(
@@ -86,6 +86,7 @@ class AriadneAPI:
                 "current_version": cw.current_version,
                 "knowledge_doc_path": cw.knowledge_doc_path,
                 "knowledge_markdown": cw.knowledge_markdown,
+                "source_asset_ids": cw.source_asset_ids,  # Include source_asset_ids
                 "chunks": [
                     {
                         "id": chunk.id,
@@ -154,6 +155,22 @@ class AriadneAPI:
         except AriadneError as exc:
             return self._error(exc)
 
+    def upload_asset_with_content(self, file_name: str, file_content: bytes, size_bytes: int) -> Dict[str, Any]:
+        """Upload asset with actual file content for processing."""
+        try:
+            asset = self.assets.upload_with_content(
+                file_name=file_name,
+                file_content=file_content,
+                size_bytes=size_bytes,
+            )
+            return self._ok({
+                "asset_id": asset.id,
+                "status": asset.status.value,
+                "progress": asset.progress,
+            })
+        except AriadneError as exc:
+            return self._error(exc)
+
     def get_asset_status(self, asset_id: str) -> Dict[str, Any]:
         try:
             asset = self.assets.status(asset_id)
@@ -199,6 +216,8 @@ class AriadneAPI:
                 session_id=payload.get("session_id", ""),
                 message=payload.get("message", ""),
                 continue_from_message_id=payload.get("continue_from_message_id"),
+                asset_ids=payload.get("asset_ids"),
+                selected_context=payload.get("selected_context"),
             )
             return self._ok(result)
         except AriadneError as exc:

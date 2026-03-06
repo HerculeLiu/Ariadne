@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from typing import List
+from typing import TYPE_CHECKING, List, Tuple
 
 from ariadne.application.config import AppConfig
-from ariadne.application.text_splitter import TextFragment, split_fragments_from_assets
+from ariadne.application.text_splitter import TextFragment, split_fragments_from_asset_objects
 from ariadne.domain.models import Asset, utc_now_iso
 from ariadne.infrastructure.app_logger import get_logger
 from ariadne.infrastructure.vector_store import DocumentFragment, VectorStore
+
+if TYPE_CHECKING:
+    from ariadne.llm.embedding_client import EmbeddingClient
 
 logger = get_logger("rag")
 
@@ -39,6 +42,7 @@ class RAGService:
         self,
         config: AppConfig,
         vector_store: VectorStore,
+        embedding_client: "EmbeddingClient" = None,
     ) -> None:
         """
         Initialize RAG service.
@@ -46,9 +50,71 @@ class RAGService:
         Args:
             config: Application config
             vector_store: Vector store instance
+            embedding_client: Embedding client for vector generation
         """
         self.config = config
         self.vector_store = vector_store
+        self.embedding_client = embedding_client
+
+    def process_pre_split_fragments(
+        self,
+        fragments: List[Tuple[str, TextFragment]],
+        asset_id: str = None,
+    ) -> int:
+        """
+        Process pre-split text fragments into vector store.
+
+        This is more efficient when text has already been extracted and split.
+
+        Args:
+            fragments: List of (asset_id, TextFragment) tuples
+            asset_id: Optional asset ID for logging
+
+        Returns:
+            Number of fragments added
+        """
+        if not fragments:
+            logger.info("No fragments to process")
+            return 0
+
+        # Generate embeddings for all fragments
+        if not self.embedding_client:
+            logger.warning("Embedding client not available, skipping vectorization")
+            return 0
+
+        # Prepare texts for batch encoding
+        texts = [frag.text for _, frag in fragments]
+        logger.info("Generating embeddings for %d fragments (asset=%s)", len(texts), asset_id or "unknown")
+
+        try:
+            embeddings = self.embedding_client.encode(texts)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to generate embeddings: %s", exc)
+            return 0
+
+        logger.info("Embeddings generated, now storing to vector store")
+
+        # Store fragments in vector store
+        doc_fragments = []
+        for (asset_id, frag), embedding in zip(fragments, embeddings):
+            doc_fragment = DocumentFragment(
+                id=make_fragment_id(asset_id, frag.order_no),
+                asset_id=asset_id,
+                text=frag.text,
+                embedding=embedding,
+                order_no=frag.order_no,
+            )
+            doc_fragments.append(doc_fragment)
+
+        # Batch add all fragments at once
+        added_count = self.vector_store.add_fragments(doc_fragments)
+
+        logger.info(
+            "Processed %d fragments into vector store (asset=%s)",
+            added_count,
+            asset_id or "unknown",
+        )
+        return added_count
 
     def process_assets(self, assets: List[Asset]) -> int:
         """
@@ -69,26 +135,55 @@ class RAGService:
             logger.info("No assets to process")
             return 0
 
-        # Extract text from assets
-        asset_texts = []
-        for asset in assets:
-            if asset.status != "ready":
-                logger.warning("Asset %s not ready (status=%s), skipping", asset.id, asset.status)
-                continue
-            # In real implementation, we'd extract text from the asset
-            # For now, skip if we don't have the actual text content
-            logger.debug("Processing asset %s: %s", asset.id, asset.file_name)
+        # Filter assets that have storage_path (actual file content)
+        valid_assets = [a for a in assets if a.storage_path]
+        if not valid_assets:
+            logger.warning("No assets with storage_path found")
+            return 0
 
-        # Note: In a real implementation, we'd:
-        # 1. Read the actual file content
-        # 2. Parse based on file type (PDF, MD, TXT, DOCX)
-        # 3. Split into fragments
-        # 4. Generate embeddings
-        # 5. Store in vector DB
+        # Split assets into text fragments
+        fragments = split_fragments_from_asset_objects(valid_assets)
+        if not fragments:
+            logger.warning("No fragments generated from assets")
+            return 0
 
-        # For now, return 0 as we need to implement file reading
-        logger.info("Asset processing not fully implemented yet")
-        return 0
+        # Generate embeddings for all fragments
+        if not self.embedding_client:
+            logger.warning("Embedding client not available, skipping vectorization")
+            return 0
+
+        # Prepare texts for batch encoding
+        texts = [frag.text for _, frag in fragments]
+        logger.info("Generating embeddings for %d fragments", len(texts))
+
+        try:
+            embeddings = self.embedding_client.encode(texts)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Failed to generate embeddings: %s", exc)
+            return 0
+
+        # Store fragments in vector store
+        # Build DocumentFragment objects for batch add
+        doc_fragments = []
+        for (asset_id, frag), embedding in zip(fragments, embeddings):
+            doc_fragment = DocumentFragment(
+                id=make_fragment_id(asset_id, frag.order_no),
+                asset_id=asset_id,
+                text=frag.text,
+                embedding=embedding,
+                order_no=frag.order_no,
+            )
+            doc_fragments.append(doc_fragment)
+
+        # Batch add all fragments at once
+        added_count = self.vector_store.add_fragments(doc_fragments)
+
+        logger.info(
+            "Processed %d assets into %d fragments in vector store",
+            len(valid_assets),
+            added_count,
+        )
+        return added_count
 
     def retrieve(
         self,

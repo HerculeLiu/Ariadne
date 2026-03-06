@@ -20,6 +20,7 @@ class AppConfig:
     llm_retry_delay_sec: float
     prompt_dir: str
     knowledge_doc_dir: str
+    asset_storage_dir: str
     log_file_path: str
     log_level: str
     prompt_hot_reload: bool
@@ -92,6 +93,7 @@ def load_config() -> AppConfig:
         llm_retry_delay_sec=float(os.getenv("LLM_RETRY_DELAY_SEC", "1.2")),
         prompt_dir=os.getenv("PROMPT_DIR", "src/prompt"),
         knowledge_doc_dir=os.getenv("KNOWLEDGE_DOC_DIR", "storage/knowledge"),
+        asset_storage_dir=os.getenv("ASSET_STORAGE_DIR", "storage/assets"),
         log_file_path=os.getenv("LOG_FILE_PATH", "logs/ariadne.log"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),
         prompt_hot_reload=_as_bool(os.getenv("PROMPT_HOT_RELOAD", "true"), True),

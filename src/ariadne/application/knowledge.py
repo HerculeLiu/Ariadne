@@ -380,13 +380,45 @@ class KnowledgeDocStore:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def save(self, courseware_id: str, markdown_text: str) -> str:
+    def save(self, courseware_id: str, markdown_text: str, source_asset_ids: list = None) -> str:
+        """Save markdown and optionally metadata."""
         path = self.base_dir / f"{courseware_id}.md"
         path.write_text(markdown_text, encoding="utf-8")
+
+        # Handle metadata file
+        meta_path = self.base_dir / f"{courseware_id}.meta.json"
+        if source_asset_ids:
+            # Save metadata with source_asset_ids
+            meta_path.write_text(
+                json.dumps({"source_asset_ids": source_asset_ids}, ensure_ascii=False),
+                encoding="utf-8"
+            )
+        else:
+            # No source_asset_ids provided (or empty list) - delete metadata file if exists
+            # This prevents stale metadata from persisting
+            if meta_path.exists():
+                meta_path.unlink()
+
         return str(path)
 
     def load(self, courseware_id: str) -> str:
+        """Load markdown content."""
         path = self.base_dir / f"{courseware_id}.md"
         if not path.exists():
             return ""
         return path.read_text(encoding="utf-8")
+
+    def load_metadata(self, courseware_id: str) -> dict:
+        """Load metadata for a courseware."""
+        meta_path = self.base_dir / f"{courseware_id}.meta.json"
+        if not meta_path.exists():
+            return {}
+        try:
+            return json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def get_source_asset_ids(self, courseware_id: str) -> list:
+        """Get source asset IDs for a courseware."""
+        metadata = self.load_metadata(courseware_id)
+        return metadata.get("source_asset_ids", [])

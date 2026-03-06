@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Dict, List
 
 from ariadne.domain.models import (
     Answer,
     Asset,
+    AssetStatus,
     ChatMessage,
     ChatSession,
     Courseware,
@@ -55,14 +58,63 @@ class InMemoryAnswerRepo:
 
 
 class InMemoryAssetRepo:
-    def __init__(self) -> None:
+    """Persistent asset repository that saves to JSON file."""
+
+    def __init__(self, storage_path: str = "storage/assets/assets.json") -> None:
+        self._storage_path = Path(storage_path)
+        self._storage_path.parent.mkdir(parents=True, exist_ok=True)
         self._items: Dict[str, Asset] = {}
+        self._load()
+
+    def _load(self) -> None:
+        """Load assets from JSON file."""
+        if self._storage_path.exists():
+            try:
+                data = json.loads(self._storage_path.read_text(encoding="utf-8"))
+                for asset_id, asset_data in data.items():
+                    # Convert status string back to enum
+                    if "status" in asset_data and isinstance(asset_data["status"], str):
+                        asset_data["status"] = AssetStatus(asset_data["status"])
+                    # Ensure all required fields have values
+                    asset_data.setdefault("progress", 0)
+                    asset_data.setdefault("error", None)
+                    asset_data.setdefault("storage_path", None)
+                    asset_data.setdefault("content_preview", None)
+                    asset_data.setdefault("chunk_count", 0)
+                    self._items[asset_id] = Asset(**asset_data)
+            except Exception as exc:
+                # Start fresh if load fails
+                pass
+
+    def _save(self) -> None:
+        """Save assets to JSON file."""
+        data = {}
+        for asset_id, asset in self._items.items():
+            asset_dict = {
+                "id": asset.id,
+                "file_name": asset.file_name,
+                "file_type": asset.file_type,
+                "size_bytes": asset.size_bytes,
+                "status": asset.status.value,
+                "progress": asset.progress,
+                "error": asset.error,
+                "storage_path": asset.storage_path,
+                "content_preview": asset.content_preview,
+                "chunk_count": asset.chunk_count,
+            }
+            data[asset_id] = asset_dict
+        self._storage_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def save(self, asset: Asset) -> None:
         self._items[asset.id] = asset
+        self._save()
 
     def get(self, asset_id: str) -> Asset | None:
         return self._items.get(asset_id)
+
+    def list_all(self) -> List[Asset]:
+        """List all assets."""
+        return list(self._items.values())
 
 
 class InMemoryExportRepo:

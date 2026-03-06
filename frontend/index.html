@@ -355,6 +355,96 @@
       font-size: 12px;
     }
 
+    .asset-files {
+      display: none;
+      margin-top: 8px;
+      display: grid;
+      gap: 6px;
+    }
+    .asset-files.has-files {
+      display: grid;
+    }
+    .asset-file-item {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(135deg, #fffbf6, #f8f4ea);
+      font-size: 13px;
+    }
+    .asset-file-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--olive);
+      display: grid;
+      place-items: center;
+    }
+    .asset-file-icon svg {
+      width: 16px;
+      height: 16px;
+    }
+    .asset-file-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .asset-file-name {
+      font-weight: 500;
+      color: var(--ink);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .asset-file-status {
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .asset-file-status.uploading {
+      color: #c4873a;
+    }
+    .asset-file-status.processing {
+      color: #2f7ab0;
+    }
+    .asset-file-status.ready {
+      color: #3f8c5a;
+    }
+    .asset-file-status.error {
+      color: #c44a3a;
+    }
+    .asset-file-remove {
+      width: 20px;
+      height: 20px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: rgba(255, 253, 247, 0.8);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      padding: 0;
+    }
+    .asset-file-remove:hover {
+      background: #f4ead8;
+      color: var(--ink);
+    }
+    .asset-file-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid #e8dcc8;
+      border-top-color: var(--olive);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .inspector-fab {
       position: fixed;
       right: 16px;
@@ -627,14 +717,15 @@
           </div>
         </div>
 
-        <input id="assetFile" type="file" style="display:none" />
+        <input id="assetFile" type="file" multiple style="display:none" accept=".pdf,.md,.txt,.docx" />
+        <div id="assetFiles" class="asset-files"></div>
 
       </section>
     </section>
   </div>
 
   <script>
-    const state = { coursewareId: null, chunks: [], webEnabled: false };
+    const state = { coursewareId: null, chunks: [], webEnabled: false, uploadedFiles: [] };
     const inspectState = { active: false, hoverEl: null, selectedMeta: null };
     let toastTimer = null;
     let loadingStageTimer = null;
@@ -850,6 +941,10 @@
         showToast('主题不能为空', 'warn', 4000);
         return;
       }
+      const assetIds = getReadyAssetIds();
+      if (assetIds.length > 0) {
+        payload.asset_ids = assetIds;
+      }
 
       $('btnGenerate').disabled = true;
       $('processingTip').style.display = 'inline-flex';
@@ -946,21 +1041,152 @@
 
     async function uploadAssetFromPicker(file) {
       if (!file) return;
-      const res = await api('/api/v1/assets/upload', {
-        method: 'POST',
-        body: JSON.stringify({ file_name: file.name, size_bytes: file.size }),
-      });
-      if (res.code !== 0) {
-        showToast(`上传失败：${res.message}`, 'warn', 4200);
+      const fileId = 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      const fileData = {
+        id: fileId,
+        name: file.name,
+        size: file.size,
+        assetId: '',
+        status: 'uploading',
+        statusText: '上传中...',
+      };
+      state.uploadedFiles.push(fileData);
+      renderAssetFiles();
+      try {
+        // Use FormData for multipart file upload
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/v1/assets/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        const res = await response.json();
+
+        if (res.code !== 0) {
+          fileData.status = 'error';
+          fileData.statusText = '上传失败: ' + (res.message || 'unknown error');
+          renderAssetFiles();
+          return;
+        }
+        const assetId = res.data.asset_id;
+        if (!assetId) {
+          fileData.status = 'error';
+          fileData.statusText = '上传失败: missing asset id';
+          renderAssetFiles();
+          return;
+        }
+        fileData.assetId = assetId;
+        const uploadStatus = res.data.status;
+        if (uploadStatus === 'ready') {
+          fileData.status = 'ready';
+          fileData.statusText = '已就绪';
+        } else {
+          fileData.status = 'processing';
+          fileData.statusText = '处理中...';
+          pollAssetStatus(assetId, fileId);
+        }
+        renderAssetFiles();
+      } catch (err) {
+        fileData.status = 'error';
+        fileData.statusText = '上传失败: ' + (err && err.message ? err.message : String(err));
+        renderAssetFiles();
+      }
+    }
+
+    async function pollAssetStatus(assetId, fileId) {
+      const maxAttempts = 60;
+      let attempts = 0;
+      const poll = async () => {
+        const fileData = state.uploadedFiles.find(f => f.id === fileId);
+        if (!fileData) return;
+        if (attempts >= maxAttempts) {
+          fileData.status = 'error';
+          fileData.statusText = '分析超时 (ID: ' + assetId + ')';
+          renderAssetFiles();
+          return;
+        }
+        attempts++;
+        try {
+          const res = await api(`/api/v1/assets/${assetId}/parse-status`);
+          if (res.code === 0 && res.data) {
+            const status = res.data.status;
+            const progress = res.data.progress || 0;
+            if (status === 'ready') {
+              fileData.status = 'ready';
+              fileData.statusText = '已就绪';
+              renderAssetFiles();
+            } else if (status === 'failed') {
+              fileData.status = 'error';
+              fileData.statusText = '失败: ' + (res.data.error || '未知错误');
+              renderAssetFiles();
+            } else if (status === 'processing' || status === 'queued') {
+              fileData.statusText = `处理中... ${progress}%`;
+              setTimeout(poll, 1500);
+            } else {
+              fileData.statusText = `状态: ${status} (${progress}%)`;
+              setTimeout(poll, 1500);
+            }
+          } else if (res.code === 10003) {
+            fileData.status = 'error';
+            fileData.statusText = '文件不存在 (可能服务器重启)';
+            renderAssetFiles();
+          } else {
+            setTimeout(poll, 1500);
+          }
+        } catch (err) {
+          fileData.statusText = '检查中... (' + attempts + '/' + maxAttempts + ')';
+          renderAssetFiles();
+          setTimeout(poll, 1500);
+        }
+      };
+      poll();
+    }
+
+    function renderAssetFiles() {
+      const panel = $('assetFiles');
+      if (!panel) return;
+      if (!state.uploadedFiles.length) {
+        panel.classList.remove('has-files');
+        panel.innerHTML = '';
         return;
       }
-      const assetId = res.data.asset_id;
-      const status = await api(`/api/v1/assets/${assetId}/parse-status`);
-      if (status.code === 0) {
-        showToast(`上传完成，解析状态：${status.data.status} (${status.data.progress}%)`);
-      } else {
-        showToast(`上传成功：${assetId}`);
-      }
+      panel.classList.add('has-files');
+      panel.innerHTML = state.uploadedFiles.map(f => {
+        const isProcessing = f.status === 'uploading' || f.status === 'processing';
+        const statusClass = f.status;
+        return `
+        <div class='asset-file-item'>
+          <div class='asset-file-icon'>
+            ${isProcessing ? '<div class="asset-file-spinner"></div>' : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>'}
+          </div>
+          <div class='asset-file-info'>
+            <div class='asset-file-name'>${esc(f.name)}</div>
+            <div class='asset-file-status ${statusClass}'>${esc(f.statusText)}</div>
+          </div>
+          <button class='asset-file-remove' type='button' onclick="removeAssetFile('${esc(f.id)}')" title='移除'>×</button>
+        </div>
+        `;
+      }).join('');
+    }
+
+    function removeAssetFile(fileId) {
+      state.uploadedFiles = state.uploadedFiles.filter(f => f.id !== fileId);
+      renderAssetFiles();
+    }
+
+    window.removeAssetFile = removeAssetFile;
+
+    function getReadyAssetIds() {
+      return state.uploadedFiles
+        .filter(f => f.status === 'ready')
+        .map(f => f.assetId);
+    }
+
+    function esc(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
     }
 
     async function exportHtml() {
@@ -997,8 +1223,10 @@
         });
       });
       composer.addEventListener('drop', (e) => {
-        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (file) uploadAssetFromPicker(file);
+        const files = Array.from(e.dataTransfer && e.dataTransfer.files || []);
+        for (const file of files) {
+          uploadAssetFromPicker(file);
+        }
       });
     }
 
@@ -1015,9 +1243,11 @@
 
     $('btnGenerate').addEventListener('click', generate);
     $('btnUpload').addEventListener('click', () => $('assetFile').click());
-    $('assetFile').addEventListener('change', (e) => {
-      const file = e.target.files && e.target.files[0];
-      uploadAssetFromPicker(file);
+    $('assetFile').addEventListener('change', async (e) => {
+      const files = Array.from(e.target.files || []);
+      for (const f of files) {
+        await uploadAssetFromPicker(f);
+      }
       e.target.value = '';
     });
 

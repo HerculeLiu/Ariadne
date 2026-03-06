@@ -49,6 +49,7 @@ class Courseware:
     knowledge_markdown: str = ""
     knowledge_doc_path: str = ""
     chunks: List[Chunk] = field(default_factory=list)
+    source_asset_ids: List[str] = field(default_factory=list)  # IDs of assets used for generation
 
 
 @dataclass
@@ -94,6 +95,9 @@ class Asset:
     status: AssetStatus
     progress: int = 0
     error: Optional[str] = None
+    storage_path: Optional[str] = None  # File storage path
+    content_preview: Optional[str] = None  # Content preview
+    chunk_count: int = 0  # Number of chunks after splitting
 
 
 @dataclass

@@ -424,10 +424,40 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const chatState = { sessionId: '', sending: false, sessions: [], historyOpen: false };
+    const chatState = { sessionId: '', sending: false, sessions: [], historyOpen: false, assetIds: [], coursewareLoaded: false };
 
     function getCoursewareId() {
       return new URLSearchParams(location.search).get('courseware_id') || '';
+    }
+
+    // Load courseware info including source_asset_ids
+    async function loadCoursewareInfo() {
+      const coursewareId = getCoursewareId();
+      if (!coursewareId || chatState.coursewareLoaded) return;
+
+      try {
+        const data = await apiJson(`/api/v1/coursewares/${encodeURIComponent(coursewareId)}`);
+        if (data.code === 0 && data.data) {
+          chatState.assetIds = data.data.source_asset_ids || [];
+          chatState.coursewareLoaded = true;
+          console.log('Loaded courseware source_asset_ids:', chatState.assetIds);
+          // Update UI to show associated files if any
+          updateFileInfo();
+        }
+      } catch (err) {
+        console.warn('Failed to load courseware info:', err);
+      }
+    }
+
+    function updateFileInfo() {
+      const metaEl = $('meta');
+      if (!metaEl) return;
+      const coursewareId = getCoursewareId();
+      let metaText = `courseware_id=${coursewareId}`;
+      if (chatState.assetIds.length > 0) {
+        metaText += ` | 关联文件: ${chatState.assetIds.length} 个`;
+      }
+      metaEl.textContent = metaText;
     }
 
     async function apiJson(path, options = {}) {
@@ -571,9 +601,17 @@
       $('chatSendBtn').disabled = true;
       try {
         const sessionId = await ensureChatSession();
+        const requestBody = {
+          session_id: sessionId,
+          message: text,  // Only user's question
+        };
+        // Include asset_ids if available (for RAG)
+        if (chatState.assetIds.length > 0) {
+          requestBody.asset_ids = chatState.assetIds;
+        }
         const data = await apiJson('/api/v1/chat/messages', {
           method: 'POST',
-          body: JSON.stringify({ session_id: sessionId, message: text }),
+          body: JSON.stringify(requestBody),
         });
         if (data.code !== 0) {
           appendChat('assistant', `Request failed: ${data.message || 'unknown error'}`);
@@ -644,6 +682,7 @@
     $('historyToggleBtn').addEventListener('click', toggleHistoryPanel);
 
     loadHtml();
+    loadCoursewareInfo();  // Load courseware info including source_asset_ids
   </script>
 </body>
 </html>

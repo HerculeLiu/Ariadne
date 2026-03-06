@@ -113,12 +113,18 @@ class LLMAgent:
             {"role": "user", "content": user_prompt},
         ])
 
-    def generate_outline_markdown(self, topic: str, keywords: list[str]) -> str:
+    def generate_outline_markdown(self, topic: str, keywords: list[str], rag_context: str = "") -> str:
         system_prompt = self.prompts.get("outline_layer.md") or self.prompts.get("understand_layer.md")
-        user_prompt = (
-            f"topic={topic}\nkeywords={keywords}\n"
-            "请只输出章节和chunk标题，不要写正文段落。"
-        )
+        user_prompt_parts = [
+            f"topic={topic}",
+            f"keywords={keywords}",
+            "请只输出章节和chunk标题，不要写正文段落。",
+        ]
+        if rag_context:
+            user_prompt_parts.insert(2, f"reference_materials={rag_context}")
+            user_prompt_parts.append("请基于以上参考资料来设计章节结构。")
+
+        user_prompt = "\n".join(user_prompt_parts)
         return self._chat([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -154,15 +160,21 @@ class LLMAgent:
         # Backward compatibility
         return self.generate_understanding_markdown(topic, keywords)
 
-    def answer_chunk_question(self, context: str, question: str, mode: str) -> str:
+    def answer_chunk_question(self, context: str, question: str, mode: str, rag_context: str | None = None) -> str:
         system_prompt = self.prompts.get("chunk_qa.md")
-        user_prompt = f"mode={mode}\ncontext={context}\nquestion={question}"
+
+        # Build user prompt with optional RAG context
+        user_prompt_parts = [f"mode={mode}", f"context={context}", f"question={question}"]
+        if rag_context:
+            user_prompt_parts.insert(2, f"reference_materials={rag_context}")
+
+        user_prompt = "\n".join(user_prompt_parts)
         return self._chat([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ])
 
-    def chat_reply(self, context: str, message: str) -> str:
+    def chat_reply(self, context: str, message: str, rag_context: str | None = None) -> str:
         system_prompt = self.prompts.get("chat_general.md")
         if not system_prompt.strip():
             system_prompt = (
@@ -170,7 +182,13 @@ class LLMAgent:
                 "Reply clearly and directly. "
                 "If the user asks for unsafe content, refuse briefly and suggest a safe alternative."
             )
-        user_prompt = f"context={context}\nmessage={message}"
+
+        # Build user prompt with optional RAG context
+        user_prompt_parts = [f"context={context}", f"message={message}"]
+        if rag_context:
+            user_prompt_parts.insert(1, f"reference_materials={rag_context}")
+
+        user_prompt = "\n".join(user_prompt_parts)
         return self._chat([
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
