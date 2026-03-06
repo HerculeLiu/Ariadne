@@ -20,6 +20,10 @@ class AppConfig:
     llm_retry_delay_sec: float
     prompt_dir: str
     knowledge_doc_dir: str
+    courseware_storage_dir: str
+    storage_index_dir: str
+    job_storage_dir: str
+    draft_storage_dir: str
     asset_storage_dir: str
     log_file_path: str
     log_level: str
@@ -93,6 +97,10 @@ def load_config() -> AppConfig:
         llm_retry_delay_sec=float(os.getenv("LLM_RETRY_DELAY_SEC", "1.2")),
         prompt_dir=os.getenv("PROMPT_DIR", "src/prompt"),
         knowledge_doc_dir=os.getenv("KNOWLEDGE_DOC_DIR", "storage/knowledge"),
+        courseware_storage_dir=os.getenv("COURSEWARE_STORAGE_DIR", "storage/coursewares"),
+        storage_index_dir=os.getenv("STORAGE_INDEX_DIR", "storage/indexes"),
+        job_storage_dir=os.getenv("JOB_STORAGE_DIR", "storage/jobs"),
+        draft_storage_dir=os.getenv("DRAFT_STORAGE_DIR", "storage/drafts"),
         asset_storage_dir=os.getenv("ASSET_STORAGE_DIR", "storage/assets"),
         log_file_path=os.getenv("LOG_FILE_PATH", "logs/ariadne.log"),
         log_level=os.getenv("LOG_LEVEL", "INFO"),

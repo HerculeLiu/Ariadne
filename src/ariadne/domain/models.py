@@ -37,6 +37,14 @@ class Chunk:
     title: str
     content: str
     order_no: int
+    chapter_no: int = 0
+    chunk_no: int = 0
+    page_id: str = ""
+    understand_state: str = "unknown"
+    is_favorite: bool = False
+    collapsed: bool = False
+    created_at: str = ""
+    updated_at: str = ""
 
 
 @dataclass
@@ -50,6 +58,9 @@ class Courseware:
     knowledge_doc_path: str = ""
     chunks: List[Chunk] = field(default_factory=list)
     source_asset_ids: List[str] = field(default_factory=list)  # IDs of assets used for generation
+    outline: List[Dict[str, object]] = field(default_factory=list)
+    default_page_id: str = "pg_generated"
+    knowledge_html_path: str = ""
 
 
 @dataclass
@@ -98,6 +109,8 @@ class Asset:
     storage_path: Optional[str] = None  # File storage path
     content_preview: Optional[str] = None  # Content preview
     chunk_count: int = 0  # Number of chunks after splitting
+    created_at: str = ""
+    updated_at: str = ""
 
 
 @dataclass
@@ -117,6 +130,7 @@ class ChatSession:
     chunk_id: str
     created_at: str
     last_active_at: str
+    title: str = ""
 
 
 @dataclass
@@ -126,6 +140,9 @@ class ChatMessage:
     role: str
     content: str
     created_at: str
+    selected_context: str = ""
+    asset_ids: List[str] = field(default_factory=list)
+    sources: List[Dict[str, object]] = field(default_factory=list)
 
 
 @dataclass
@@ -137,6 +154,19 @@ class RewriteDraft:
     rewritten: str
     status: str
     created_at: str
+    courseware_id: str = ""
+
+
+@dataclass
+class Page:
+    id: str
+    courseware_id: str
+    page_type: str
+    title: str
+    html_path: str
+    render_config: Dict[str, object] = field(default_factory=dict)
+    created_at: str = ""
+    updated_at: str = ""
 
 
 @dataclass
