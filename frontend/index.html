@@ -2001,6 +2001,12 @@
         return;
       }
 
+      // 如果面板已关闭，禁用转场动画，直接跳转
+      if (state.structurePanelDismissed) {
+        location.href = `/downloads/${encodeURIComponent(coursewareId)}.html`;
+        return;
+      }
+
       transitionAnimating = true;
       document.body.classList.add('is-transitioning-to-courseware');
 

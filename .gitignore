@@ -36,6 +36,7 @@ storage/
 # Temporary files
 tmp/
 .temp/
+*.broken
 
 # Local agent / tooling metadata
 .agents/

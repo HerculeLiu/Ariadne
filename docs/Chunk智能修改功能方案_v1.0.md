@@ -1,6 +1,6 @@
 # Ariadne Chunk 智能修改功能方案
 
-**版本**: v1.0
+**版本**: v1.1
 **日期**: 2026-03-07
 **状态**: 设计中
 
@@ -33,6 +33,7 @@
 | **仅处理已选** | 只分析用户已选的 chunks，不遍历全部 |
 | **格式一致** | UI 与现有生成/交互格式保持一致 |
 | **纯 AI 编辑** | 不提供手动编辑功能 |
+| **Outline 同步** | Chunk 标题变化时同步更新 outline |
 
 ---
 
@@ -116,6 +117,7 @@
 - 哪些 chunks 需要修改
 - 修改的原因是什么
 - 生成修改后的内容
+- 如果 chunk 标题需要调整，一并返回新标题
 
 ## 用户意图
 {user_intent}
@@ -127,6 +129,8 @@
 - 只分析用户已选的 chunks，不要考虑其他 chunks
 - 用户已明确要求编辑，请积极给出修改建议
 - 每个需要修改的 chunk 都要生成完整的修改后内容
+- 如果修改后内容主题发生变化，建议同时更新 chunk 标题
+- 标题变化需要同步到 outline 中
 
 ## 返回格式（JSON）
 {
@@ -137,6 +141,7 @@
       "label": "章节 · chunk 标题",
       "should_modify": true,
       "reason": "修改原因说明",
+      "new_title": "新的 chunk 标题（如果需要修改标题，否则返回原标题）",
       "rewritten_content": "修改后的完整内容"
     }
   ]
@@ -160,11 +165,14 @@
 判断要点：
 1. 这是修改 chunks 的请求吗？还是普通聊天提问？
 2. 如果是修改请求，需要修改哪些已选 chunks？
+3. chunk 标题是否需要调整以反映内容变化？
 
 ## 要求
 - 只考虑用户已选的 chunks
 - 如果不是修改请求，返回正常的聊天回复
 - 如果是修改请求，返回需要修改的 chunks 列表
+- 如果内容主题发生变化，建议同时更新 chunk 标题
+- 标题变化需要同步到 outline 中
 
 ## 返回格式（JSON）
 {
@@ -176,6 +184,7 @@
       "label": "章节 · chunk 标题",
       "should_modify": true,
       "reason": "修改原因说明",
+      "new_title": "新的 chunk 标题（如果需要修改标题，否则返回原标题）",
       "rewritten_content": "修改后的完整内容"
     }
   ]
@@ -223,6 +232,7 @@ class ChunkSuggestion:
     label: str                 # 显示标签
     should_modify: bool        # 是否建议修改
     reason: str                # 修改原因
+    new_title: Optional[str]   # 新标题（如果标题需要变化）
     rewritten_content: str     # 修改后内容
 ```
 
@@ -322,6 +332,7 @@ def apply_chunk_modification(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         payload: {
             "chunk_id": str,
             "new_content": str,
+            "new_title": str | None,     # 新标题（可选）
             "expected_version": int
         }
     """
@@ -333,12 +344,154 @@ def apply_chunk_modification(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         ),
         expected_version=payload.get("expected_version", 0)
     )
+
+    # 如果标题有变化，同步更新 outline
+    new_title = payload.get("new_title")
+    if new_title:
+        self._sync_outline_title(payload["chunk_id"], new_title)
+
     return self._ok(result)
+
+
+def _sync_outline_title(self, chunk_id: str, new_title: str) -> None:
+    """同步 chunk 标题到 outline
+
+    Args:
+        chunk_id: chunk 唯一标识 (格式: "chapterIdx-chunkIdx")
+        new_title: 新的 chunk 标题
+    """
+    # 解析 chunk_id 获取章节和 chunk 索引
+    parts = chunk_id.split("-")
+    if len(parts) != 2:
+        return
+
+    chapter_idx, chunk_idx = int(parts[0]), int(parts[1])
+
+    # 获取 courseware
+    courseware = self.repos["courseware"].get_current()
+
+    # 更新 outline 中对应 chunk 的标题
+    if courseware.outline and chapter_idx < len(courseware.outline):
+        chapter = courseware.outline[chapter_idx]
+        if chunk_idx < len(chapter.get("chunks", [])):
+            chapter["chunks"][chunk_idx]["title"] = new_title
+
+    # 持久化更新后的 courseware
+    self.repos["courseware"].update_outline(
+        courseware.id, courseware.outline
+    )
 ```
 
 ---
 
-## 6. 前端实现
+## 6. Outline 同步机制
+
+### 6.1 背景
+
+Chunk 修改可能涉及标题变化，此时需要同步更新 courseware 的 outline，保持数据一致性。
+
+### 6.2 触发条件
+
+| 条件 | 说明 |
+|------|------|
+| **标题变化** | LLM 返回的 `new_title` 与原标题不同 |
+| **主题变更** | 修改后内容主题发生明显变化 |
+
+### 6.3 同步流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     应用 Chunk 修改                              │
+│                                                                 │
+│  用户点击 "应用修改"                                             │
+│        │                                                        │
+│        ▼                                                        │
+│  POST /api/v1/chunks/apply                                      │
+│  {                                                              │
+│    chunk_id: "0-1",                                             │
+│    new_content: "...",                                          │
+│    new_title: "向量索引的工作原理"  // 标题有变化                │
+│  }                                                              │
+│        │                                                        │
+│        ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │  1. 更新 chunk 内容                                      │   │
+│  │  2. 检查 new_title 是否存在                              │   │
+│  │  3. 如果存在，同步更新 outline                           │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│        │                                                        │
+│        ▼                                                        │
+│  解析 chunk_id: "0-1" → chapterIdx=0, chunkIdx=1               │
+│        │                                                        │
+│        ▼                                                        │
+│  更新 outline[0].chunks[1].title                                │
+│        │                                                        │
+│        ▼                                                        │
+│  持久化 courseware (markdown 文件同步更新)                      │
+│        │                                                        │
+│        ▼                                                        │
+│  返回成功                                                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 6.4 Outline 数据结构
+
+```python
+# courseware.outline 结构
+outline = [
+    {
+        "title": "第一章 向量检索基础",
+        "summary": "本章介绍...",
+        "chunks": [
+            {
+                "id": "ch1-chunk1",
+                "title": "向量索引的工作原理",  # ← 这里需要同步
+                "order_no": 1
+            },
+            {
+                "id": "ch1-chunk2",
+                "title": "Embedding 模型介绍",
+                "order_no": 2
+            }
+        ]
+    }
+]
+```
+
+### 6.5 前端同步提示
+
+```javascript
+async function applyChunk(chunkKey, newContent, newTitle) {
+    const response = await fetch("/api/v1/chunks/apply", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            chunk_id: chunkKey,
+            new_content: newContent,
+            new_title: newTitle,  // 传递新标题
+            expected_version: courseware.current_version
+        })
+    });
+
+    if (response.ok) {
+        const result = await response.json();
+
+        // 如果 outline 也更新了，提示用户
+        if (result.data.outline_updated) {
+            showToast(`✓ Chunk 已更新，Outline 标题已同步`);
+        } else {
+            showToast(`✓ Chunk 已更新`);
+        }
+
+        refreshChunkDisplay(chunkKey, newContent);
+        markChunkApplied(chunkKey);
+    }
+}
+```
+
+---
+
+## 7. 前端实现
 
 ### 6.1 功能栏按钮
 
@@ -499,34 +652,128 @@ function showModificationSuggestions(chunks) {
 </div>
 ```
 
-### 6.7 应用修改
+### 7.6 应用修改
 
 ```javascript
-async function applyChunk(chunkKey, newContent) {
-    const response = await fetch("/api/v1/chunks/apply", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            chunk_id: chunkKey,
-            new_content: newContent,
-            expected_version: courseware.current_version
-        })
-    });
+// Chunk 修改状态枚举
+const ChunkModStatus = {
+    PENDING: 'pending',       // 待处理
+    APPLYING: 'applying',     // 应用中
+    SUCCESS: 'success',       // 成功
+    FAILED: 'failed'          // 失败
+};
 
-    if (response.ok) {
-        // 刷新该 chunk 显示
-        refreshChunkDisplay(chunkKey, newContent);
-        // 标记已应用
-        markChunkApplied(chunkKey);
+// 全局状态管理
+const chunkModifications = new Map();  // key -> status
+
+async function applyChunk(chunkKey, newContent, newTitle) {
+    // 更新状态为"应用中"
+    setChunkStatus(chunkKey, ChunkModStatus.APPLYLYING);
+
+    try {
+        const response = await fetch("/api/v1/chunks/apply", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+                chunk_id: chunkKey,
+                new_content: newContent,
+                new_title: newTitle,
+                expected_version: courseware.current_version
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+
+            // 如果 outline 也更新了，提示用户
+            if (result.data.outline_updated) {
+                showToast(`✓ Chunk 已更新，Outline 标题已同步`);
+            } else {
+                showToast(`✓ Chunk 已更新`);
+            }
+
+            refreshChunkDisplay(chunkKey, newContent);
+            setChunkStatus(chunkKey, ChunkModStatus.SUCCESS);
+        } else {
+            throw new Error('修改失败');
+        }
+    } catch (error) {
+        setChunkStatus(chunkKey, ChunkModStatus.FAILED);
+        showToast(`✗ 修改失败: ${error.message}`);
     }
+}
+
+function setChunkStatus(chunkKey, status) {
+    chunkModifications.set(chunkKey, status);
+    updateChunkCardUI(chunkKey, status);
+}
+
+function updateChunkCardUI(chunkKey, status) {
+    const card = document.querySelector(`[data-chunk-key="${chunkKey}"]`);
+    if (!card) return;
+
+    // 移除所有状态类
+    card.classList.remove('applying', 'success', 'failed');
+
+    // 添加新状态类
+    card.classList.add(status);
+
+    // 更新按钮状态
+    const actions = card.querySelector('.chunk-mod-actions');
+    if (status === ChunkModStatus.APPLYING) {
+        actions.innerHTML = `<span class="status-applying">应用中...</span>`;
+    } else if (status === ChunkModStatus.SUCCESS) {
+        actions.innerHTML = `<span class="status-success">✓ 已应用</span>`;
+    } else if (status === ChunkModStatus.FAILED) {
+        actions.innerHTML = `
+            <span class="status-failed">✗ 失败</span>
+            <button class="btn-retry" onclick="applyChunk('${chunkKey}', ...)">重试</button>
+        `;
+    }
+}
+
+// 批量应用
+async function applyAllModifications() {
+    const chunksToApply = Array.from(chunkModifications.entries())
+        .filter(([key, status]) => status === ChunkModStatus.PENDING);
+
+    // 显示总体进度
+    showBatchProgress(chunksToApply.length);
+
+    for (let i = 0; i < chunksToApply.length; i++) {
+        const [key, _] = chunksToApply[i];
+        await applyChunk(key, ...);
+        updateBatchProgress(i + 1, chunksToApply.length);
+    }
+
+    hideBatchProgress();
+}
+
+function showBatchProgress(total) {
+    // 显示进度条
+    const progressHTML = `
+        <div class="batch-progress">
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: 0%"></div>
+            </div>
+            <div class="progress-text">正在应用 0/${total}</div>
+        </div>
+    `;
+    // 插入到合适位置
+}
+
+function updateBatchProgress(current, total) {
+    const percentage = (current / total) * 100;
+    document.querySelector('.progress-fill').style.width = `${percentage}%`;
+    document.querySelector('.progress-text').textContent = `正在应用 ${current}/${total}`;
 }
 ```
 
 ---
 
-## 7. 样式规范
+## 8. 样式规范
 
-### 7.1 Chunk 修改卡片样式
+### 8.1 Chunk 修改卡片样式
 
 ```css
 /* Chunk 修改卡片 */
@@ -609,11 +856,102 @@ async function applyChunk(chunkKey, newContent) {
     padding-top: 12px;
     border-top: 1px solid var(--border-light);
 }
+
+/* Chunk 修改状态样式 */
+.chunk-mod-card.applying {
+    border-left-color: var(--warning-color);
+    opacity: 0.8;
+}
+
+.chunk-mod-card.success {
+    border-left-color: var(--success-color);
+    background: var(--success-bg);
+}
+
+.chunk-mod-card.failed {
+    border-left-color: var(--error-color);
+}
+
+/* 状态指示器 */
+.status-applying {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--warning-color);
+    font-size: 13px;
+}
+
+.status-applying::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--warning-color);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.status-success {
+    color: var(--success-color);
+    font-size: 13px;
+}
+
+.status-failed {
+    color: var(--error-color);
+    font-size: 13px;
+    margin-right: 8px;
+}
+
+.btn-retry {
+    padding: 4px 12px;
+    border: 1px solid var(--error-color);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--error-color);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.btn-retry:hover {
+    background: var(--error-bg);
+}
+
+/* 批量进度条 */
+.batch-progress {
+    margin: 16px 0;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+}
+
+.progress-bar {
+    height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+}
 ```
 
 ---
 
-## 8. 实施计划
+## 9. 实施计划
 
 ### Phase 1: Prompt 文件
 - [ ] 1.1 创建 `src/prompt/intent_edit_explicit.md`
@@ -638,10 +976,17 @@ async function applyChunk(chunkKey, newContent) {
 - [ ] 5.1 单个应用功能
 - [ ] 5.2 批量应用功能
 - [ ] 5.3 应用后刷新显示
+- [ ] 5.4 修改进度状态管理
+- [ ] 5.5 失败重试机制
+
+### Phase 6: Outline 同步
+- [ ] 6.1 标题变化检测
+- [ ] 6.2 同步更新 outline 数据
+- [ ] 6.3 前端同步提示
 
 ---
 
-## 9. 待确认事项
+## 10. 待确认事项
 
 | 序号 | 事项 | 状态 |
 |------|------|------|
@@ -649,10 +994,12 @@ async function applyChunk(chunkKey, newContent) {
 | 2 | 意图识别 Prompt 细节调优 | 待确认 |
 | 3 | 是否需要支持部分内容修改（而非全文替换） | 待确认 |
 | 4 | 修改历史记录需求 | 待确认 |
+| 5 | Outline 同步策略（是否需要用户确认） | 待确认 |
+| 6 | 批量应用时的并发控制（是否串行） | 待确认 |
 
 ---
 
-## 10. 参考资料
+## 11. 参考资料
 
 - 现有 `rewrite_draft` 功能
 - Chat 多选 chunk 功能
@@ -664,4 +1011,5 @@ async function applyChunk(chunkKey, newContent) {
 
 | 版本 | 日期 | 变更内容 | 作者 |
 |------|------|----------|------|
+| v1.1 | 2026-03-07 | 新增 Outline 同步机制、修改进度状态 | Claude |
 | v1.0 | 2026-03-07 | 初版设计 | Claude |
