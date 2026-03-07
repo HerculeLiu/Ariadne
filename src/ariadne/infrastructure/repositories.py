@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 from ariadne.application.knowledge import chunks_to_markdown, markdown_to_html
 from ariadne.domain.models import (
@@ -186,13 +186,25 @@ class FileCoursewareRepo:
         markdown_text = courseware.knowledge_markdown or chunks_to_markdown(topic=courseware.topic, chunks=courseware.chunks)
         courseware.knowledge_markdown = markdown_text
         courseware.knowledge_doc_path = str(self._markdown_path(courseware.id))
-        courseware.knowledge_html_path = str(self._html_path(courseware.id))
+
+        # 生成 HTML，失败时明确标记不可用
         html_text = ""
+        html_available = False
         if courseware.chunks:
             try:
                 html_text = markdown_to_html(markdown_text)
-            except Exception:
-                html_text = ""
+                html_available = bool(html_text.strip())
+            except Exception as e:
+                from ariadne.infrastructure.app_logger import get_logger
+                logger = get_logger("repo.courseware")
+                logger.warning("Failed to generate HTML for courseware %s: %s", courseware.id, e)
+                html_available = False
+
+        # 只有 HTML 真正生成时才记录路径
+        if html_available:
+            courseware.knowledge_html_path = str(self._html_path(courseware.id))
+        else:
+            courseware.knowledge_html_path = None
 
         meta = {
             "id": courseware.id,
@@ -204,11 +216,12 @@ class FileCoursewareRepo:
             "default_page_id": courseware.default_page_id,
             "knowledge_doc_path": courseware.knowledge_doc_path,
             "knowledge_html_path": courseware.knowledge_html_path,
+            "html_available": html_available,  # 新增字段，明确标记 HTML 是否可用
         }
         _atomic_write_json(self._meta_path(courseware.id), meta)
         _atomic_write_json(self._outline_path(courseware.id), courseware.outline)
         _atomic_write_text(self._markdown_path(courseware.id), markdown_text)
-        if html_text:
+        if html_available:
             _atomic_write_text(self._html_path(courseware.id), html_text)
 
         chunks_dir = self._chunks_dir(courseware.id)
@@ -552,6 +565,18 @@ class FileAssetRepo:
         asset_dir.mkdir(parents=True, exist_ok=True)
         _atomic_write_json(self._fragments_path(asset_id), fragments)
 
+    def get_fragments(self, asset_id: str) -> List[dict]:
+        return _read_json(self._fragments_path(asset_id), [])
+
+    def iter_fragments(self, asset_ids: List[str] | None = None) -> Iterable[dict]:
+        target_ids = asset_ids or [row.get("id", "") for row in _read_json(self.index_path, [])]
+        for asset_id in target_ids:
+            if not asset_id:
+                continue
+            for fragment in self.get_fragments(asset_id):
+                if isinstance(fragment, dict):
+                    yield fragment
+
     def get(self, asset_id: str) -> Asset | None:
         cached = self._items.get(asset_id)
         if cached:
@@ -706,6 +731,7 @@ class FileChatSessionRepo:
                     content=row.get("content", ""),
                     created_at=row.get("created_at", ""),
                     selected_context=row.get("selected_context", ""),
+                    selected_chunk_ids=list(row.get("selected_chunk_ids", [])),
                     asset_ids=list(row.get("asset_ids", [])),
                     sources=list(row.get("sources", [])),
                 )

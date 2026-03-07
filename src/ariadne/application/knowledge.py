@@ -17,53 +17,102 @@ def markdown_to_chunks(markdown_text: str) -> list[Chunk]:
 
     Backward compatible fallback:
     - ## chunk
+
+    Returns:
+        List of Chunk with chapter_no and chunk_no properly set.
     """
+    def _strip_chunk_label(text: str) -> str:
+        value = (text or "").strip()
+        value = re.sub(r"^\d+(?:\.\d+)?\s+", "", value)
+        return value.strip()
+
     chunks: list[Chunk] = []
     current_chapter = ""
     current_title = ""
     lines: list[str] = []
     order = 1
-    has_h3 = False
+    chapter_no = 0
+    chunk_no = 0
 
     for raw in markdown_text.splitlines():
         line = raw.rstrip()
         if line.startswith("## "):
+            # 遇到新章节，先保存上一个 chunk
             if current_title:
-                chunks.append(Chunk(id=f"mdck_{order}", title=current_title, content="\n".join(lines).strip(), order_no=order))
+                chunks.append(Chunk(
+                    id=f"mdck_{order}",
+                    title=current_title,
+                    content="\n".join(lines).strip(),
+                    order_no=order,
+                    chapter_no=chapter_no,
+                    chunk_no=chunk_no
+                ))
                 order += 1
                 lines = []
                 current_title = ""
+            # 新章节开始
+            chapter_no += 1
+            chunk_no = 0  # 重置 chunk 编号
             current_chapter = line[3:].strip()
             continue
 
         if line.startswith("### "):
-            has_h3 = True
+            # 遇到新 chunk，先保存上一个
             if current_title:
-                chunks.append(Chunk(id=f"mdck_{order}", title=current_title, content="\n".join(lines).strip(), order_no=order))
+                chunks.append(Chunk(
+                    id=f"mdck_{order}",
+                    title=current_title,
+                    content="\n".join(lines).strip(),
+                    order_no=order,
+                    chapter_no=chapter_no,
+                    chunk_no=chunk_no
+                ))
                 order += 1
                 lines = []
-            chunk_name = line[4:].strip()
+                current_title = ""
+            # 新 chunk 开始
+            chunk_no += 1
+            chunk_name = _strip_chunk_label(line[4:].strip())
             current_title = f"{current_chapter} / {chunk_name}" if current_chapter else chunk_name
             continue
 
         if current_title:
             lines.append(line)
 
+    # 保存最后一个 chunk
     if current_title:
-        chunks.append(Chunk(id=f"mdck_{order}", title=current_title, content="\n".join(lines).strip(), order_no=order))
+        chunks.append(Chunk(
+            id=f"mdck_{order}",
+            title=current_title,
+            content="\n".join(lines).strip(),
+            order_no=order,
+            chapter_no=chapter_no,
+            chunk_no=chunk_no
+        ))
 
     if chunks:
         return chunks
 
     # Fallback for old markdown where ## directly used as chunk.
+    # 这种情况下所有 chunk 属于第一章
     title = None
     lines = []
     order = 1
+    chunk_no = 0
+    chapter_no = 1  # fallback 模式默认第一章
     for raw in markdown_text.splitlines():
         line = raw.rstrip()
         if line.startswith("## "):
             if title is not None:
-                chunks.append(Chunk(id=f"mdck_{order}", title=title, content="\n".join(lines).strip(), order_no=order))
+                chunk_no += 1
+                chunks.append(Chunk(
+                    id=f"mdck_{order}",
+                    title=title,
+                    content="\n".join(lines).strip(),
+                    order_no=order,
+                    chapter_no=chapter_no,
+                    chunk_no=chunk_no
+                ))
                 order += 1
                 lines = []
             title = line[3:].strip()
@@ -71,17 +120,83 @@ def markdown_to_chunks(markdown_text: str) -> list[Chunk]:
             if title is not None:
                 lines.append(line)
     if title is not None:
-        chunks.append(Chunk(id=f"mdck_{order}", title=title, content="\n".join(lines).strip(), order_no=order))
+        chunk_no += 1
+        chunks.append(Chunk(
+            id=f"mdck_{order}",
+            title=title,
+            content="\n".join(lines).strip(),
+            order_no=order,
+            chapter_no=chapter_no,
+            chunk_no=chunk_no
+        ))
     return chunks
 
 
 def chunks_to_markdown(topic: str, chunks: list[Chunk], material_lines: list[str] | None = None) -> str:
+    """将 chunks 转换为 markdown 格式，按章节结构输出
+
+    Args:
+        topic: 主题/标题
+        chunks: chunk 列表，应包含 chapter_no 和 chunk_no
+        material_lines: 可选的参考资料行
+
+    Returns:
+        markdown 文本
+
+    输出格式：
+        # 主题
+
+        ## 第1章
+        ### 1.1 chunk标题
+        内容...
+
+        ### 1.2 chunk标题
+        内容...
+
+        ## 第2章
+        ### 2.1 chunk标题
+        内容...
+    """
     lines: list[str] = [f"# {topic}", ""]
 
-    lines.append("## 章节1：核心讲解")
-    lines.append("")
+    if not chunks:
+        return "\n".join(lines).strip() + "\n"
+
+    def _normalize_chunk_title(chunk: Chunk, chapter_no: int) -> str:
+        title = (chunk.title or "").strip()
+        title = re.sub(r"^\d+(?:\.\d+)?\s+", "", title)
+        title = re.sub(rf"^(?:第{chapter_no}章|章节{chapter_no}|第{chapter_no}章：[^/]+|章节{chapter_no}：[^/]+)\s*/\s*", "", title)
+        title = re.sub(r"^[^/]+?\s*/\s*", "", title) if "/" in title else title
+        title = re.sub(r"^\d+(?:\.\d+)?\s+", "", title)
+        return title.strip() or f"Chunk {chunk.order_no}"
+
+    # 按章节分组 chunks
+    from collections import defaultdict
+    chapters = defaultdict(list)
     for chunk in sorted(chunks, key=lambda x: x.order_no):
-        lines.extend([f"### Chunk 1.{chunk.order_no}：{chunk.title}", chunk.content.strip(), ""])
+        # 如果 chunk 没有 chapter_no，默认归入第 1 章（兼容旧数据）
+        chapter_no = chunk.chapter_no if chunk.chapter_no and chunk.chapter_no > 0 else 1
+        chapters[chapter_no].append(chunk)
+
+    # 按章节输出
+    for chapter_no in sorted(chapters.keys()):
+        chapter_chunks = chapters[chapter_no]
+        lines.append(f"## 第{chapter_no}章")
+        lines.append("")
+
+        for chunk in chapter_chunks:
+            # 如果有 chunk_no，使用 "章节号.chunk_no" 格式
+            # 否则使用 order_no 作为编号
+            if chunk.chunk_no and chunk.chunk_no > 0:
+                chunk_label = f"{chapter_no}.{chunk.chunk_no}"
+            else:
+                chunk_label = f"{chapter_no}.{chunk.order_no}"
+            chunk_title = _normalize_chunk_title(chunk, chapter_no)
+            lines.extend([f"### {chunk_label} {chunk_title}", chunk.content.strip(), ""])
+
+    # 如果有参考资料，追加到末尾
+    if material_lines:
+        lines.extend(["", "## 参考资料", ""] + material_lines)
 
     return "\n".join(lines).strip() + "\n"
 
@@ -242,6 +357,8 @@ def markdown_to_html(markdown_text: str) -> str:
     render_config: dict[str, str] = _load_generation_layer_defaults()
     current_chapter: dict | None = None
     current_chunk: dict | None = None
+    chapter_no = 0
+    chunk_no = 0
     in_code = False
     code_lang = ""
     code_lines: list[str] = []
@@ -250,7 +367,7 @@ def markdown_to_html(markdown_text: str) -> str:
     def ensure_chapter() -> dict:
         nonlocal current_chapter
         if current_chapter is None:
-            current_chapter = {"title": "默认章节", "chunks": []}
+            current_chapter = {"title": "默认章节", "chunks": [], "chapterNo": 1}
             chapters.append(current_chapter)
         return current_chapter
 
@@ -258,7 +375,17 @@ def markdown_to_html(markdown_text: str) -> str:
         nonlocal current_chunk
         chapter = ensure_chapter()
         if current_chunk is None:
-            current_chunk = {"title": "核心内容", "paragraphs": [], "bullets": [], "tables": [], "interactions": [], "codes": []}
+            current_chunk = {
+                "id": "",
+                "title": "核心内容",
+                "paragraphs": [],
+                "bullets": [],
+                "tables": [],
+                "interactions": [],
+                "codes": [],
+                "chapterNo": chapter.get("chapterNo", 1),
+                "chunkNo": max(1, len(chapter["chunks"]) + 1),
+            }
             chapter["chunks"].append(current_chunk)
         return current_chunk
 
@@ -313,20 +440,26 @@ def markdown_to_html(markdown_text: str) -> str:
             continue
 
         if stripped.startswith("## "):
-            current_chapter = {"title": stripped[3:].strip(), "chunks": []}
+            chapter_no += 1
+            chunk_no = 0
+            current_chapter = {"title": stripped[3:].strip(), "chunks": [], "chapterNo": chapter_no}
             chapters.append(current_chapter)
             current_chunk = None
             continue
 
         if stripped.startswith("### "):
             chapter = ensure_chapter()
+            chunk_no += 1
             current_chunk = {
+                "id": "",
                 "title": stripped[4:].strip(),
                 "paragraphs": [],
                 "bullets": [],
                 "tables": [],
                 "interactions": [],
                 "codes": [],
+                "chapterNo": chapter.get("chapterNo", 1),
+                "chunkNo": chunk_no,
             }
             chapter["chunks"].append(current_chunk)
             continue
@@ -350,14 +483,18 @@ def markdown_to_html(markdown_text: str) -> str:
                 "title": "",
                 "chunks": [
                     {
+                        "id": "",
                         "title": "",
                         "paragraphs": [clean] if clean else [],
                         "bullets": [],
                         "tables": [],
                         "interactions": [],
                         "codes": [],
+                        "chapterNo": 1,
+                        "chunkNo": 1,
                     }
                 ],
+                "chapterNo": 1,
             }
         ]
 

@@ -261,9 +261,21 @@ class AriadneHandler(BaseHTTPRequestHandler):
             page_id = path.split("/")[4]
             return self._send_json(self.api.apply_draft(page_id, payload))
 
-        if path.startswith("/api/v1/pages/") and path.endswith("/undo"):
-            page_id = path.split("/")[4]
-            return self._send_json(self.api.undo(page_id, payload))
+        if path.startswith("/api/v1/coursewares/") and path.endswith("/undo"):
+            courseware_id = path.split("/")[4]
+            return self._send_json(self.api.undo(courseware_id, payload))
+
+        if path == "/api/v1/intent/analyze":
+            return self._send_json(self.api.analyze_intent(payload))
+
+        if path.startswith("/api/v1/chunks/") and path.endswith("/apply"):
+            chunk_id = path.split("/")[4]
+            payload["chunk_id"] = chunk_id
+            return self._send_json(self.api.apply_chunk_modification(payload))
+
+        if path.startswith("/api/v1/chunks/") and path.endswith("/delete"):
+            chunk_id = path.split("/")[4]
+            return self._send_json(self.api.delete_chunk(chunk_id, payload))
 
         self._send_json({"code": 10003, "message": "resource not found", "trace_id": "tr_http"}, status=404)
 

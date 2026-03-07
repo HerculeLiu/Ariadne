@@ -33,6 +33,13 @@ class DocumentFragment:
     embedding: List[float]
     order_no: int
     created_at: str = field(default_factory=utc_now_iso)
+    source_start: int = 0
+    source_end: int = 0
+    block_type: str = "paragraph"
+    section_title: str = ""
+    page_no: int = 0
+    heading_path_text: str = ""
+    score: float = 0.0
 
 
 class VectorStore:
@@ -112,6 +119,12 @@ class VectorStore:
                     "asset_id": f.asset_id,
                     "order_no": f.order_no,
                     "created_at": f.created_at,
+                    "source_start": f.source_start,
+                    "source_end": f.source_end,
+                    "block_type": f.block_type,
+                    "section_title": f.section_title,
+                    "page_no": f.page_no,
+                    "heading_path_text": f.heading_path_text,
                 }
                 for f in fragments
             ]
@@ -178,6 +191,13 @@ class VectorStore:
                             text=results["documents"][0][i],
                             embedding=results["embeddings"][0][i],
                             order_no=results["metadatas"][0][i].get("order_no", 0),
+                            source_start=results["metadatas"][0][i].get("source_start", 0),
+                            source_end=results["metadatas"][0][i].get("source_end", 0),
+                            block_type=results["metadatas"][0][i].get("block_type", "paragraph"),
+                            section_title=results["metadatas"][0][i].get("section_title", ""),
+                            page_no=results["metadatas"][0][i].get("page_no", 0),
+                            heading_path_text=results["metadatas"][0][i].get("heading_path_text", ""),
+                            score=max(0.0, 1.0 - float(results["distances"][0][i])) if results.get("distances") else 0.0,
                         )
                     )
 

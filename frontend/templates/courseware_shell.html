@@ -182,6 +182,48 @@
       border-color: transparent;
       color: #f8f4ea;
     }}
+    .chunk-delete-btn {{
+      position: absolute;
+      right: 42px;
+      top: 10px;
+      width: 24px;
+      height: 24px;
+      border: 1px solid #d7c4b3;
+      border-radius: 8px;
+      background: #fff7f4;
+      color: #a35142;
+      font-weight: 700;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      z-index: 2;
+      transition: width .18s ease, min-width .18s ease, padding .18s ease, background .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease;
+    }}
+    .chunk-delete-btn:hover {{
+      background: #f9e7e1;
+      border-color: #c88d7f;
+    }}
+    .chunk-delete-btn.is-armed {{
+      width: auto;
+      min-width: 88px;
+      padding: 0 10px;
+      background: linear-gradient(135deg, #b84d43, #cf5f54);
+      border-color: transparent;
+      color: #fff7f2;
+      font-size: 11px;
+      letter-spacing: .12px;
+      box-shadow: 0 6px 14px rgba(184, 77, 67, .22);
+    }}
+    .chunk-delete-btn.is-armed:hover {{
+      background: linear-gradient(135deg, #a94239, #c55349);
+      border-color: transparent;
+    }}
+    .chunk-delete-btn:disabled {{
+      opacity: .5;
+      cursor: not-allowed;
+    }}
     .chunk-card:before {{
       content:'';
       position:absolute; inset:0 auto auto 0; width:100%; height:3px;
@@ -1025,7 +1067,7 @@
     const RENDER_CONFIG = {config_json};
     const state = {{ chapterIdx: 0, chunkIdx: 0 }};
     const inspectState = {{ active: false, hoverEl: null, selectedMeta: null }};
-    const chatState = {{ sessionId: '', sending: false, selectedChunks: [], historyOpen: false, sessions: [], uploadedFiles: [], aiEditMode: false, inputComposing: false, coursewareVersion: 1 }};
+    const chatState = {{ sessionId: '', sending: false, selectedChunks: [], historyOpen: false, sessions: [], uploadedFiles: [], aiEditMode: false, inputComposing: false, coursewareVersion: 1, chunkMetaLoaded: false, pendingDeleteKey: '' }};
     const $ = (id) => document.getElementById(id);
     function showContentFallback(reason) {{
       const fallback = $('renderFallbackCard');
@@ -1081,7 +1123,7 @@
           const location = match ? `Chapter ${{match[1]}}, Chunk ${{match[2]}}` : chunk.label;
           const title = chunk.title || chunk.label;
           return `
-          <div class='msg-ref-card' data-chunk-key='${{escAttr(chunk.key || '')}}' title='点击跳转'>
+          <div class='msg-ref-card' data-chunk-key='${{escAttr(chunk.key || '')}}'${{chunk.chunkId ? ` data-chunk-id='${{escAttr(chunk.chunkId)}}'` : ''}} title='点击跳转'>
             <div class='msg-ref-title'>${{esc(title)}}</div>
             <div class='msg-ref-subtitle'>${{esc(location)}}</div>
           </div>
@@ -1169,11 +1211,73 @@
       if (!ref) return null;
       return {{
         key,
+        chunkId: ref.chunk.id || '',
         title: normalizeChunkTitle(ref.chunk.title || ''),
         content: chunkPlainText(ref.chunk),
         chapterIdx: ref.chapterIdx,
         chunkIdx: ref.chunkIdx,
       }};
+    }}
+    function chunkLabel(chapterIdx, chunkIdx) {{
+      return `Chapter ${{chapterIdx + 1}} · Chunk ${{chunkIdx + 1}}`;
+    }}
+    function syncModelChunkMetadata(coursewareData) {{
+      const chunks = Array.isArray(coursewareData && coursewareData.chunks) ? coursewareData.chunks : [];
+      const byId = new Map();
+      const byPosition = new Map();
+      chunks.forEach((chunk) => {{
+        if (chunk && chunk.id) {{
+          byId.set(chunk.id, chunk);
+        }}
+        const chapterNo = Number(chunk.chapter_no || 0);
+        const chunkNo = Number(chunk.chunk_no || 0);
+        if (chapterNo > 0 && chunkNo > 0) {{
+          byPosition.set(`${{chapterNo - 1}}-${{chunkNo - 1}}`, chunk);
+        }}
+      }});
+      MODEL.chapters.forEach((chapter, chapterIdx) => {{
+        (chapter.chunks || []).forEach((chunk, chunkIdx) => {{
+          const meta = (chunk && chunk.id ? byId.get(chunk.id) : null) || byPosition.get(`${{chapterIdx}}-${{chunkIdx}}`);
+          if (!meta) return;
+          chunk.id = meta.id || chunk.id || '';
+          chunk.chapterNo = Number(meta.chapter_no || chapterIdx + 1);
+          chunk.chunkNo = Number(meta.chunk_no || chunkIdx + 1);
+          chunk.pageId = meta.page_id || chunk.pageId || '';
+        }});
+      }});
+      chatState.chunkMetaLoaded = true;
+    }}
+    function findChunkKeyById(chunkId) {{
+      if (!chunkId) return '';
+      for (let chapterIdx = 0; chapterIdx < MODEL.chapters.length; chapterIdx += 1) {{
+        const chapter = MODEL.chapters[chapterIdx];
+        const chunks = Array.isArray(chapter && chapter.chunks) ? chapter.chunks : [];
+        for (let chunkIdx = 0; chunkIdx < chunks.length; chunkIdx += 1) {{
+          if ((chunks[chunkIdx] && chunks[chunkIdx].id) === chunkId) {{
+            return `${{chapterIdx}}-${{chunkIdx}}`;
+          }}
+        }}
+      }}
+      return '';
+    }}
+    function rebuildSelectedChunks() {{
+      const rebuilt = [];
+      chatState.selectedChunks.forEach((item) => {{
+        const key = item.chunkId ? findChunkKeyById(item.chunkId) : item.key;
+        const snapshot = key ? getChunkSnapshotByKey(key) : null;
+        if (!snapshot) return;
+        rebuilt.push({{
+          ...item,
+          key,
+          chunkId: snapshot.chunkId || item.chunkId || '',
+          label: chunkLabel(snapshot.chapterIdx, snapshot.chunkIdx),
+          title: snapshot.title,
+          content: [snapshot.title, snapshot.content].filter(Boolean).join('\\n'),
+        }});
+      }});
+      chatState.selectedChunks = rebuilt;
+      renderSelectedChunks();
+      applyChunkSelectionUI();
     }}
     function buildChunkPreviewText(title, content) {{
       const parts = [];
@@ -1212,8 +1316,13 @@
       if (!chatCoursewareId) return;
       try {{
         const data = await apiJson(`/api/v1/coursewares/${{encodeURIComponent(chatCoursewareId)}}`);
-        if (data.code === 0 && data.data && Number(data.data.current_version) > 0) {{
-          chatState.coursewareVersion = Number(data.data.current_version);
+        if (data.code === 0 && data.data) {{
+          if (Number(data.data.current_version) > 0) {{
+            chatState.coursewareVersion = Number(data.data.current_version);
+          }}
+          syncModelChunkMetadata(data.data);
+          rebuildSelectedChunks();
+          render();
         }}
       }} catch (err) {{
         console.warn('Failed to load courseware version:', err);
@@ -1375,6 +1484,9 @@
       const selectedContext = chunksToUse
         .map((x) => `[${{x.label}}]\\n${{x.content}}`)
         .join('\\n\\n');
+      const selectedChunkIds = chunksToUse
+        .map((x) => String(x.chunkId || '').trim())
+        .filter(Boolean);
 
       appendChat('user', text, chunksToUse);
 
@@ -1401,7 +1513,10 @@
           session_id: sessionId,
           message: text,
         }};
-        if (selectedContext) {{
+        if (selectedChunkIds.length > 0) {{
+          requestBody.selected_chunk_ids = selectedChunkIds;
+        }}
+        if (selectedContext && selectedChunkIds.length < chunksToUse.length) {{
           requestBody.selected_context = selectedContext;
         }}
         if (assetIds.length > 0) {{
@@ -1815,10 +1930,10 @@
         removeSelectedChunk(key);
         return;
       }}
-      const label = `Chapter ${{chapterIdx + 1}} · Chunk ${{chunkIdx + 1}}`;
+      const label = chunkLabel(chapterIdx, chunkIdx);
       const title = normalizeChunkTitle(chunk.title || '');
       const content = [title, chunkPlainText(chunk)].filter(Boolean).join('\\n');
-      chatState.selectedChunks.push({{ key, label, title, content }});
+      chatState.selectedChunks.push({{ key, label, title, content, chunkId: chunk.id || '' }});
       renderSelectedChunks();
       applyChunkSelectionUI();
     }}
@@ -1850,6 +1965,16 @@
         </div>`
       )).join('');
     }}
+    function buildChunkActionButtons(chapterIdx, chunkIdx, chunk) {{
+      const key = `${{chapterIdx}}-${{chunkIdx}}`;
+      const selected = isChunkSelected(key);
+      const canDelete = !!(chunk && chunk.id);
+      const armed = chatState.pendingDeleteKey === key;
+      const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-action='toggle-chat-chunk' data-chunk-key='${{escAttr(key)}}' type='button' title='${{selected ? '移出聊天' : '加入聊天'}}'>${{selected ? '-' : '+'}}</button>`;
+      const deleteText = armed ? '确认删除' : '×';
+      const deleteBtn = `<button class='chunk-delete-btn${{armed ? ' is-armed' : ''}}' data-action='delete-chunk' data-chunk-key='${{escAttr(key)}}'${{chunk && chunk.id ? ` data-chunk-id='${{escAttr(chunk.id)}}'` : ''}} type='button' title='${{canDelete ? (armed ? '再次点击确认删除' : '删除此 Chunk') : 'Chunk 元数据未加载'}}'${{canDelete ? '' : ' disabled'}}>${{deleteText}}</button>`;
+      return `${{deleteBtn}}${{addBtn}}`;
+    }}
     function renderCard() {{
       const chapter = MODEL.chapters[state.chapterIdx];
       const chunk = chapter.chunks[state.chunkIdx] || {{ title:'', paragraphs:[], bullets:[], tables:[], interactions:[] }};
@@ -1866,10 +1991,8 @@
         ? `<div class='chapter-head'><h3 class='chapter-title'>${{inlineMd(chapterTitle)}}</h3></div>`
         : '';
       const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
-      const key = `${{state.chapterIdx}}-${{state.chunkIdx}}`;
-      const selected = isChunkSelected(key);
-      const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{state.chapterIdx}},${{state.chunkIdx}})' title='${{selected ? '移出聊天' : '加入聊天'}}'>${{selected ? '-' : '+'}}</button>`;
-      $('chunkCard').innerHTML = `${{addBtn}}${{chapterHead}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}`;
+      const actionBtns = buildChunkActionButtons(state.chapterIdx, state.chunkIdx, chunk);
+      $('chunkCard').innerHTML = `${{actionBtns}}${{chapterHead}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}`;
       const percent = Math.round(((flatIndex(state.chapterIdx, state.chunkIdx) + 1) / flatCount()) * 100);
       setProgress(percent);
       $('prevBtn').disabled = state.chapterIdx === 0 && state.chunkIdx === 0;
@@ -1889,10 +2012,8 @@
           const showChunkTitle = !!cleanTitle;
           if (!hasBody && !showChunkTitle) return '';
           const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
-          const key = `${{ci}}-${{ki}}`;
-          const selected = isChunkSelected(key);
-          const addBtn = `<button class='chunk-add-btn${{selected ? ' selected' : ''}}' data-chunk-key='${{key}}' type='button' onclick='addChunkToChat(${{ci}},${{ki}})' title='${{selected ? '移出聊天' : '加入聊天'}}'>${{selected ? '-' : '+'}}</button>`;
-          return `<article class='chunk-card' id='chunk-${{ci}}-${{ki}}'>${{addBtn}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}</article>`;
+          const actionBtns = buildChunkActionButtons(ci, ki, chunk);
+          return `<article class='chunk-card' id='chunk-${{ci}}-${{ki}}'${{chunk && chunk.id ? ` data-chunk-id='${{escAttr(chunk.id)}}'` : ''}}>${{actionBtns}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}</article>`;
         }}).join('');
         const chapterTitle = normalizeChapterTitle(chapter.title || '', ci);
         const showChapterHead = !!chapterTitle;
@@ -1915,7 +2036,88 @@
         if (ki < 0) {{ ci -= 1; if (ci >= 0) ki = MODEL.chapters[ci].chunks.length - 1; }}
       }}
     }}
+    function chooseNextChunkAfterDeletion(chapterIdx, chunkIdx) {{
+      const chapter = MODEL.chapters[chapterIdx];
+      const chapterLen = Array.isArray(chapter && chapter.chunks) ? chapter.chunks.length : 0;
+      if (chapterLen > 0) {{
+        if (chunkIdx < chapterLen) return {{ chapterIdx, chunkIdx }};
+        return {{ chapterIdx, chunkIdx: Math.max(0, chapterLen - 1) }};
+      }}
+      if (MODEL.chapters.length === 0) return {{ chapterIdx: 0, chunkIdx: 0 }};
+      if (chapterIdx < MODEL.chapters.length) {{
+        return {{ chapterIdx, chunkIdx: 0 }};
+      }}
+      return {{ chapterIdx: Math.max(0, MODEL.chapters.length - 1), chunkIdx: 0 }};
+    }}
+    function clearPendingDelete(renderAfter = false) {{
+      if (!chatState.pendingDeleteKey) return;
+      chatState.pendingDeleteKey = '';
+      if (renderAfter) render();
+    }}
+    function armDeleteChunk(chapterIdx, chunkIdx) {{
+      const key = `${{chapterIdx}}-${{chunkIdx}}`;
+      chatState.pendingDeleteKey = chatState.pendingDeleteKey === key ? '' : key;
+      render();
+    }}
+    async function deleteChunk(chapterIdx, chunkIdx) {{
+      const ref = getChunkRefByKey(`${{chapterIdx}}-${{chunkIdx}}`);
+      if (!ref || !ref.chunk || !ref.chunk.id || !chatCoursewareId) {{
+        showToast('Chunk 元数据尚未加载，暂时无法删除。', 'warning');
+        return;
+      }}
+      const key = `${{chapterIdx}}-${{chunkIdx}}`;
+      if (chatState.pendingDeleteKey !== key) {{
+        armDeleteChunk(chapterIdx, chunkIdx);
+        return;
+      }}
+      chatState.pendingDeleteKey = '';
+      const chunkId = ref.chunk.id;
+      try {{
+        const result = await apiJson(`/api/v1/chunks/${{encodeURIComponent(chunkId)}}/delete`, {{
+          method: 'POST',
+          body: JSON.stringify({{
+            courseware_id: chatCoursewareId,
+            expected_version: chatState.coursewareVersion || 1,
+          }}),
+        }});
+        if (result.code !== 0) throw new Error(result.error?.message || '删除失败');
+
+        MODEL.chapters[chapterIdx].chunks.splice(chunkIdx, 1);
+        if (!MODEL.chapters[chapterIdx].chunks.length) {{
+          MODEL.chapters.splice(chapterIdx, 1);
+        }}
+
+        const nextPos = chooseNextChunkAfterDeletion(chapterIdx, chunkIdx);
+        state.chapterIdx = nextPos.chapterIdx;
+        state.chunkIdx = nextPos.chunkIdx;
+
+        if (Number(result.data && result.data.version) > 0) {{
+          chatState.coursewareVersion = Number(result.data.version);
+        }}
+        try {{
+          await loadCoursewareVersion();
+        }} catch (syncErr) {{
+          console.warn('Failed to resync courseware after delete:', syncErr);
+          rebuildSelectedChunks();
+          render();
+        }}
+        showToast('Chunk 已删除。', 'success');
+      }} catch (err) {{
+        showToast(err && err.message ? err.message : '删除失败，请稍后重试。', 'error');
+      }}
+    }}
     function render() {{
+      if (!Array.isArray(MODEL.chapters) || MODEL.chapters.length === 0) {{
+        $('courseTitle').textContent = MODEL.title || 'Ariadne';
+        $('heroSection').style.display = String(RENDER_CONFIG.show_hero || 'true').toLowerCase() !== 'false' ? 'block' : 'none';
+        $('contentFlow').style.display = 'block';
+        $('chunkCard').style.display = 'none';
+        $('pagerNav').style.display = 'none';
+        renderNav();
+        $('contentFlow').innerHTML = `<section class='chapter-block' id='chapter-0'><article class='chunk-card'><p>当前课件已无可展示的 Chunk。</p></article></section>`;
+        applyChunkSelectionUI();
+        return;
+      }}
       if (!isChapterRenderable(MODEL.chapters[state.chapterIdx], state.chapterIdx)) {{
         state.chapterIdx = firstRenderableChapterIndex();
         state.chunkIdx = 0;
@@ -2076,6 +2278,7 @@
     }}
     window.addChunkToChat = addChunkToChat;
     window.removeSelectedChunk = removeSelectedChunk;
+    window.deleteChunk = deleteChunk;
     function autoGrowChatInput() {{
       const box = $('chatInput');
       if (!box) return;
@@ -2123,7 +2326,8 @@
         if (!target) return;
         const refCard = target.closest('.msg-ref-card');
         if (!(refCard instanceof HTMLElement)) return;
-        const jumpKey = refCard.getAttribute('data-chunk-key') || '';
+        const chunkId = refCard.getAttribute('data-chunk-id') || '';
+        const jumpKey = chunkId ? findChunkKeyById(chunkId) : (refCard.getAttribute('data-chunk-key') || '');
         if (jumpKey) jumpToChunk(jumpKey);
       }});
     }}
@@ -2142,6 +2346,27 @@
         if (jumpBtn instanceof HTMLElement) {{
           const jumpKey = jumpBtn.getAttribute('data-chunk-key') || '';
           if (jumpKey) jumpToChunk(jumpKey);
+        }}
+      }});
+    }}
+    const contentRoot = document.querySelector('.main');
+    if (contentRoot) {{
+      contentRoot.addEventListener('click', (e) => {{
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+        const actionBtn = target.closest('[data-action]');
+        if (!(actionBtn instanceof HTMLElement)) return;
+        const action = actionBtn.getAttribute('data-action') || '';
+        const key = actionBtn.getAttribute('data-chunk-key') || '';
+        const parsed = parseChunkKey(key);
+        if (!parsed) return;
+        if (action === 'toggle-chat-chunk') {{
+          clearPendingDelete(false);
+          addChunkToChat(parsed.chapterIdx, parsed.chunkIdx);
+          return;
+        }}
+        if (action === 'delete-chunk') {{
+          deleteChunk(parsed.chapterIdx, parsed.chunkIdx);
         }}
       }});
     }}
@@ -2216,6 +2441,10 @@
       }}
     }}, true);
     document.addEventListener('click', (e) => {{
+      const target = e.target instanceof Element ? e.target : null;
+      if (chatState.pendingDeleteKey && !(target && target.closest('.chunk-delete-btn'))) {{
+        clearPendingDelete(true);
+      }}
       if (!inspectState.active) return;
       const el = e.target;
       if (!(el instanceof Element)) return;

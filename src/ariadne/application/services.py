@@ -12,6 +12,7 @@ from uuid import uuid4
 from ariadne.application.config import load_config
 from ariadne.application.file_parser import FileParserService, _flush_logs
 from ariadne.application.knowledge import KnowledgeDocStore, chunks_to_markdown, markdown_to_chunks, markdown_to_html
+from ariadne.application.query_rewrite import QueryRewriteService
 from ariadne.domain.errors import (
     FileSizeLimitError,
     NotFoundError,
@@ -182,6 +183,9 @@ class GenerationService:
         job_id = f"job_{uuid4().hex[:8]}"
         now = utc_now_iso()
 
+        # 为每个课件生成唯一的 default_page_id，避免 undo 时页面定位冲突
+        unique_page_id = f"pg_{courseware_id}"
+
         courseware = Courseware(
             id=courseware_id,
             topic=topic,
@@ -191,6 +195,7 @@ class GenerationService:
             knowledge_markdown="",
             knowledge_doc_path="",
             source_asset_ids=asset_ids or [],
+            default_page_id=unique_page_id,
         )
         courseware.outline = []
         job = GenerationJob(
@@ -362,6 +367,7 @@ class GenerationService:
                         query_embedding=query_embedding,
                         top_k=5,
                         asset_ids=asset_ids,
+                        rewrite_context={"topic": topic},
                     )
                     if results:
                         outline_rag_context = self.rag_service.format_context_for_prompt(results, max_length=6000)
@@ -427,6 +433,11 @@ class GenerationService:
                             query_embedding=query_embedding,
                             top_k=3,
                             asset_ids=asset_ids,
+                            rewrite_context={
+                                "topic": topic,
+                                "chapter_title": task["chapter_title"],
+                                "chunk_title": task["chunk_title"],
+                            },
                         )
                         if results:
                             rag_context = self.rag_service.format_context_for_prompt(results)
@@ -819,19 +830,38 @@ class CoursewareService:
         logger.info("rewrite applied draft=%s version=%s", draft.id, cw.current_version)
         return {"version": cw.current_version}
 
-    def undo_latest(self, page_id: str, expected_version: int) -> dict:
-        for cw in self.repo.list_all():
-            if cw.current_version != expected_version:
-                continue
-            target_version = max(1, cw.current_version - 1)
-            restored = self.repo.restore_snapshot(cw.id, target_version) if hasattr(self.repo, "restore_snapshot") else None
-            if not restored:
-                raise VersionConflictError("version mismatch", field="expected_version", reason="snapshot not found")
-            restored.current_version = target_version
-            self.repo.save(restored)
-            self.event_store.add("undo", {"page_id": page_id, "version": target_version})
-            return {"version": target_version}
-        raise VersionConflictError("version mismatch", field="expected_version", reason="no matching page version")
+    def undo_latest(self, courseware_id: str, page_id: str, expected_version: int) -> dict:
+        """撤销最后一次修改
+
+        Args:
+            courseware_id: 课件 ID，直接定位课件，不依赖 page_id 反推
+            page_id: 页面 ID（用于日志记录，不影响定位）
+            expected_version: 期望的当前版本号（用于乐观锁）
+
+        注意：
+            之前通过 page_id 扫描 chunk 反推 courseware_id，但 page_id 系统不统一
+            （存在 pg_generated, pg_knowledge_shell 等固定值），可能导致定位错误。
+            现在直接使用 courseware_id 定位，更可靠。
+        """
+        # 直接用 courseware_id 获取课件，不再靠 page_id 反推
+        cw = self.get(courseware_id)
+        if not cw:
+            raise NotFoundError("courseware not found", field="courseware_id", reason=f"courseware_id {courseware_id} not found")
+
+        # 检查版本是否匹配
+        if cw.current_version != expected_version:
+            raise VersionConflictError("version mismatch", field="expected_version",
+                                       reason=f"expected {expected_version}, got {cw.current_version}")
+
+        # 对目标课件做 snapshot restore
+        target_version = max(1, cw.current_version - 1)
+        restored = self.repo.restore_snapshot(cw.id, target_version) if hasattr(self.repo, "restore_snapshot") else None
+        if not restored:
+            raise VersionConflictError("version mismatch", field="expected_version", reason="snapshot not found")
+        restored.current_version = target_version
+        self.repo.save(restored)
+        self.event_store.add("undo", {"page_id": page_id, "courseware_id": courseware_id, "version": target_version})
+        return {"version": target_version}
 
     def get_markdown(self, courseware_id: str) -> dict:
         cw = self.get(courseware_id)
@@ -852,11 +882,18 @@ class CoursewareService:
         if hasattr(self.repo, "create_snapshot"):
             self.repo.create_snapshot(cw, "markdown_update_before_apply")
         cw.knowledge_markdown = markdown_text
+        # markdown_to_chunks 已经正确解析了章节结构，保留它
         cw.chunks = markdown_to_chunks(markdown_text)
         for idx, chunk in enumerate(cw.chunks, start=1):
-            chunk.chapter_no = 1
-            chunk.chunk_no = idx
-            chunk.page_id = cw.default_page_id
+            # 只在 chapter_no 未设置时才设置默认值，保留 markdown_to_chunks 返回的章节结构
+            if not chunk.chapter_no or chunk.chapter_no <= 0:
+                chunk.chapter_no = 1
+            # 只在 chunk_no 未设置时才设置
+            if not chunk.chunk_no or chunk.chunk_no <= 0:
+                chunk.chunk_no = idx
+            # page_id 未设置时才设置
+            if not chunk.page_id:
+                chunk.page_id = cw.default_page_id
             chunk.created_at = chunk.created_at or utc_now_iso()
             chunk.updated_at = utc_now_iso()
         cw.current_version += 1
@@ -865,6 +902,44 @@ class CoursewareService:
         self.event_store.add("markdown_update", {"courseware_id": courseware_id, "version": cw.current_version})
         logger.info("markdown updated courseware=%s version=%s path=%s", courseware_id, cw.current_version, cw.knowledge_doc_path)
         return {"courseware_id": cw.id, "version": cw.current_version, "path": cw.knowledge_doc_path}
+
+    def delete_chunk(self, courseware_id: str, chunk_id: str, expected_version: int) -> dict:
+        cw = self.get(courseware_id)
+        if not cw:
+            raise NotFoundError("courseware not found")
+        if expected_version != cw.current_version:
+            raise VersionConflictError("version mismatch", field="expected_version", reason="current version changed")
+
+        ordered = sorted(cw.chunks, key=lambda x: x.order_no)
+        target_index = next((idx for idx, item in enumerate(ordered) if item.id == chunk_id), -1)
+        if target_index < 0:
+            raise NotFoundError("chunk not found")
+
+        if hasattr(self.repo, "create_snapshot"):
+            self.repo.create_snapshot(cw, "delete_chunk_before_apply")
+
+        deleted = ordered.pop(target_index)
+        chapter_map: dict[int, int] = {}
+        chapter_counts: dict[int, int] = {}
+        next_chapter_no = 1
+        for order_no, chunk in enumerate(ordered, start=1):
+            original_chapter = chunk.chapter_no if chunk.chapter_no and chunk.chapter_no > 0 else 1
+            if original_chapter not in chapter_map:
+                chapter_map[original_chapter] = next_chapter_no
+                next_chapter_no += 1
+            new_chapter_no = chapter_map[original_chapter]
+            chapter_counts[new_chapter_no] = chapter_counts.get(new_chapter_no, 0) + 1
+            chunk.chapter_no = new_chapter_no
+            chunk.chunk_no = chapter_counts[new_chapter_no]
+            chunk.order_no = order_no
+            chunk.updated_at = utc_now_iso()
+
+        cw.chunks = ordered
+        cw.current_version += 1
+        self._sync_markdown(cw)
+        self.repo.save(cw)
+        self.event_store.add("chunk_delete", {"courseware_id": cw.id, "chunk_id": deleted.id, "version": cw.current_version})
+        return {"version": cw.current_version, "deleted_chunk_id": deleted.id}
 
     def _sync_markdown(self, cw: Courseware) -> None:
         cw.knowledge_markdown = chunks_to_markdown(topic=cw.topic, chunks=cw.chunks)
@@ -930,6 +1005,7 @@ class QAService:
                     query_embedding=query_embedding,
                     top_k=3,
                     asset_ids=courseware.source_asset_ids,
+                    rewrite_context={"topic": courseware.topic, "chunk_title": chunk.title},
                 )
                 if results:
                     rag_context = self.rag_service.format_context_for_prompt(results, max_length=4000)
@@ -987,6 +1063,113 @@ class ChatService:
         self.embedding_client = embedding_client
         self.courseware_service = courseware_service
 
+    def _extract_chunk_reference(self, query: str) -> tuple[int | None, int | None]:
+        text = (query or "").strip()
+        if not text:
+            return None, None
+        match = re.search(r"\b(\d+)\.(\d+)\b", text)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+        chapter_match = re.search(r"第\s*(\d+)\s*章", text)
+        chunk_match = re.search(r"第\s*(\d+)\s*(?:个)?\s*(?:chunk|块|小节|部分)", text, flags=re.I)
+        if not chunk_match:
+            chunk_match = re.search(r"(?:chunk|块|小节|部分)\s*(\d+)", text, flags=re.I)
+        chapter_no = int(chapter_match.group(1)) if chapter_match else None
+        chunk_no = int(chunk_match.group(1)) if chunk_match else None
+        return chapter_no, chunk_no
+
+    def _retrieve_courseware_chunks(
+        self,
+        courseware: Courseware | None,
+        *,
+        query: str,
+        selected_chunk_ids: List[str] | None = None,
+        selected_context: str = "",
+        top_k: int = 3,
+    ) -> List[Tuple[Chunk, float, List[str]]]:
+        if not courseware or not courseware.chunks:
+            return []
+
+        rewriter = self.rag_service.query_rewriter if self.rag_service else QueryRewriteService()
+        rewrite_plan = rewriter.rewrite(
+            query,
+            topic=courseware.topic,
+            selected_context=selected_context,
+            max_queries=3,
+        )
+        all_queries = rewrite_plan.all_queries()
+        terms = rewriter.extract_keywords(" ".join([*all_queries, courseware.topic]))
+        selected_ids = {value for value in (selected_chunk_ids or []) if value}
+        ref_chapter_no, ref_chunk_no = self._extract_chunk_reference(query)
+
+        ranked: List[Tuple[Chunk, float, List[str]]] = []
+        for chunk in courseware.chunks:
+            title = (chunk.title or "").strip()
+            content = (chunk.content or "").strip()
+            if not title and not content:
+                continue
+
+            title_lower = title.lower()
+            content_lower = content.lower()
+            score = 0.0
+            reasons: List[str] = []
+
+            if chunk.id and chunk.id in selected_ids:
+                score += 1.2
+                reasons.append("selected_boost")
+
+            if ref_chapter_no and chunk.chapter_no == ref_chapter_no:
+                score += 2.2
+                reasons.append("chapter_match")
+                if ref_chunk_no and chunk.chunk_no == ref_chunk_no:
+                    score += 4.0
+                    reasons.append("chunk_match")
+
+            for full_query in all_queries:
+                normalized = full_query.strip().lower()
+                if len(normalized) < 2:
+                    continue
+                if normalized and normalized in title_lower:
+                    score += 3.2
+                    reasons.append("query_in_title")
+                elif normalized and normalized in content_lower:
+                    score += 1.8
+                    reasons.append("query_in_content")
+
+            for term in terms:
+                lowered = term.lower()
+                if len(lowered) < 2:
+                    continue
+                if lowered in title_lower:
+                    score += 1.7
+                    reasons.append("keyword_title")
+                elif lowered in content_lower:
+                    score += 0.8
+                    reasons.append("keyword_content")
+
+            if score <= 0:
+                continue
+            ranked.append((chunk, score, reasons))
+
+        ranked.sort(key=lambda item: item[1], reverse=True)
+        return ranked[:top_k]
+
+    def _format_courseware_chunk_context(self, hits: List[Tuple[Chunk, float, List[str]]], max_length: int = 5000) -> str:
+        if not hits:
+            return ""
+        parts: List[str] = []
+        total = 0
+        for idx, (chunk, _score, reasons) in enumerate(hits, start=1):
+            label = f"课件片段{idx}: 第{chunk.chapter_no or 1}章 第{chunk.chunk_no or chunk.order_no}节 {chunk.title}"
+            reason_text = f"（命中原因: {', '.join(dict.fromkeys(reasons[:3]))}）" if reasons else ""
+            body = (chunk.content or "").strip()
+            part = f"{label}{reason_text}\n{body}"
+            if total + len(part) > max_length:
+                break
+            parts.append(part)
+            total += len(part)
+        return "\n\n".join(parts)
+
     def create_session(self, courseware_id: str, page_id: str, chunk_id: str) -> ChatSession:
         now = utc_now_iso()
         session = ChatSession(
@@ -1010,6 +1193,7 @@ class ChatService:
         continue_from_message_id: str | None = None,
         asset_ids: List[str] | None = None,
         selected_context: str | None = None,
+        selected_chunk_ids: List[str] | None = None,
     ) -> Dict[str, object]:
         """
         Send a chat message.
@@ -1019,7 +1203,8 @@ class ChatService:
             message: User's question (without chunk content - used for RAG retrieval)
             continue_from_message_id: Optional message to continue from
             asset_ids: Asset IDs for RAG retrieval
-            selected_context: Optional selected chunk content (only sent to LLM, not used for RAG)
+            selected_context: Optional selected chunk content hint (fallback for rewrite)
+            selected_chunk_ids: Optional selected chunk IDs used as retrieval boost, not hard context
         """
         session = self.sessions.get(session_id)
         if not session:
@@ -1028,80 +1213,119 @@ class ChatService:
             raise ValidationError("message is empty", field="message", reason="required")
 
         effective_asset_ids = asset_ids
+        courseware = self.courseware_service.get(session.courseware_id) if self.courseware_service else None
         if not effective_asset_ids and self.courseware_service:
-            courseware = self.courseware_service.get(session.courseware_id)
             if courseware and courseware.source_asset_ids:
                 effective_asset_ids = courseware.source_asset_ids
                 logger.debug("Using courseware source_asset_ids: %s", effective_asset_ids)
 
-        # Build the full message for storage (include selected context if provided)
-        full_message = f"{selected_context}\n\n{message}" if selected_context else message
         user_msg = ChatMessage(
             id=f"msg_{uuid4().hex[:8]}",
             session_id=session_id,
             role="user",
-            content=full_message,
+            content=message,
             created_at=utc_now_iso(),
             selected_context=selected_context or "",
+            selected_chunk_ids=list(selected_chunk_ids or []),
             asset_ids=list(effective_asset_ids or []),
         )
         self.messages.save(user_msg)
         if not session.title or session.title == "新对话":
             session.title = message[:24]
 
-        # Build RAG context using ONLY the user's question (not selected_context)
-        rag_context = ""
-        if effective_asset_ids and self.rag_service and self.embedding_client:
+        source_rag_context = ""
+        if effective_asset_ids and self.rag_service:
             try:
-                # Use message directly for RAG - no extraction needed since selected_context is separate
-                query_embedding = self.embedding_client.encode_single(message)
+                query_embedding = self.embedding_client.encode_single(message) if self.embedding_client else []
                 results = self.rag_service.retrieve(
                     query=message,
                     query_embedding=query_embedding,
                     top_k=5,
                     asset_ids=effective_asset_ids,
+                    rewrite_context={
+                        "topic": courseware.topic if courseware else "",
+                        "selected_context": selected_context or "",
+                    },
                 )
                 if results:
-                    rag_context = self.rag_service.format_context_for_prompt(results, max_length=8000)
-                    logger.debug("RAG context for chat: query='%s', %d chars, %d results", message[:100], len(rag_context), len(results))
+                    source_rag_context = self.rag_service.format_context_for_prompt(results, max_length=8000)
+                    logger.debug(
+                        "Source RAG context for chat: query='%s', %d chars, %d results",
+                        message[:100],
+                        len(source_rag_context),
+                        len(results),
+                    )
             except Exception as exc:
                 logger.warning("RAG retrieval failed for chat: %s", exc)
 
-        # Build context for LLM: combine selected_context + rag_context + message
+        courseware_hits = self._retrieve_courseware_chunks(
+            courseware,
+            query=message,
+            selected_chunk_ids=selected_chunk_ids,
+            selected_context=selected_context or "",
+            top_k=3,
+        )
+        courseware_rag_context = self._format_courseware_chunk_context(courseware_hits, max_length=5000)
+
         context_parts = [
             f"session={session_id}",
             f"courseware={session.courseware_id}",
             f"page={session.page_id}",
             f"continue_from={continue_from_message_id or ''}",
         ]
-        if rag_context:
-            context_parts.append(f"rag_context={rag_context[:500]}...")  # Log preview
+        if courseware_rag_context:
+            context_parts.append(f"courseware_hits={len(courseware_hits)}")
+        if source_rag_context:
+            context_parts.append(f"source_rag_context={source_rag_context[:500]}...")
 
-        # Build the full message for LLM: selected_context + rag_context + user question
-        llm_message = message
-        if selected_context:
-            llm_message = f"【选中的内容】\n{selected_context}\n\n【我的问题】\n{message}"
-        if rag_context:
-            llm_message = f"{llm_message}\n\n【参考资料】\n{rag_context}"
+        combined_context_parts: List[str] = []
+        if courseware_rag_context:
+            combined_context_parts.append(f"【课件相关内容】\n{courseware_rag_context}")
+        if source_rag_context:
+            combined_context_parts.append(f"【原始资料】\n{source_rag_context}")
+        combined_rag_context = "\n\n".join(combined_context_parts) or None
 
         llm_reply = self.llm.chat_reply(
             context=";".join(context_parts),
-            message=llm_message,
-            rag_context=None,  # Already embedded in llm_message
+            message=message,
+            rag_context=combined_rag_context,
         )
+        reply_sources = [
+            {
+                "type": "courseware_chunk",
+                "chunk_id": chunk.id,
+                "title": chunk.title,
+                "chapter_no": chunk.chapter_no,
+                "chunk_no": chunk.chunk_no,
+            }
+            for chunk, _score, _reasons in courseware_hits
+        ]
         assistant_msg = ChatMessage(
             id=f"msg_{uuid4().hex[:8]}",
             session_id=session_id,
             role="assistant",
             content=llm_reply,
             created_at=utc_now_iso(),
-            sources=[],
+            sources=reply_sources,
         )
         self.messages.save(assistant_msg)
         session.last_active_at = utc_now_iso()
         self.sessions.save(session)
-        self.event_store.add("chat_message", {"session_id": session_id, "with_rag": bool(rag_context)})
-        logger.info("chat message processed session=%s with_rag=%s", session_id, bool(rag_context))
+        self.event_store.add(
+            "chat_message",
+            {
+                "session_id": session_id,
+                "with_source_rag": bool(source_rag_context),
+                "with_courseware_rag": bool(courseware_hits),
+                "selected_chunk_ids": list(selected_chunk_ids or []),
+            },
+        )
+        logger.info(
+            "chat message processed session=%s with_source_rag=%s with_courseware_rag=%s",
+            session_id,
+            bool(source_rag_context),
+            bool(courseware_hits),
+        )
         return {"reply": assistant_msg.content, "message_id": assistant_msg.id}
 
     def list_sessions(self, courseware_id: str | None, page_id: str | None) -> List[ChatSession]:
@@ -1344,10 +1568,15 @@ class AssetService:
                     [
                         {
                             "fragment_id": make_fragment_id(asset.id, frag.order_no),
+                            "asset_id": asset.id,
                             "order_no": frag.order_no,
                             "text": frag.text,
                             "source_start": frag.source_start,
                             "source_end": frag.source_end,
+                            "heading_path": list(frag.heading_path),
+                            "block_type": frag.block_type,
+                            "section_title": frag.section_title,
+                            "page_no": frag.page_no,
                         }
                         for _, frag in fragments
                     ],
@@ -1472,10 +1701,6 @@ def build_services() -> Dict[str, object]:
     knowledge_store = KnowledgeDocStore(config.knowledge_doc_dir)
 
     # RAG components
-    embedding_client = EmbeddingClient(config)
-    vector_store = VectorStore(config)
-    rag_service = RAGService(config, vector_store, embedding_client)
-
     coursewares = FileCoursewareRepo(
         base_dir=config.courseware_storage_dir,
         index_path=str(Path(config.storage_index_dir) / "coursewares.json"),
@@ -1504,6 +1729,12 @@ def build_services() -> Dict[str, object]:
 
     retrieval_settings = RetrievalSettingsService()
     profile_service = ProfileService(profiles, local_only_default=config.local_only)
+
+    # RAG components
+    embedding_client = EmbeddingClient(config)
+    vector_store = VectorStore(config)
+    query_rewriter = QueryRewriteService()
+    rag_service = RAGService(config, vector_store, embedding_client, asset_repo=assets, query_rewriter=query_rewriter)
 
     # Create CoursewareService first (needed by ChatService and QAService)
     courseware_service = CoursewareService(coursewares, event_store, knowledge_store)

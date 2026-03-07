@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, List, Tuple
 
 from ariadne.application.config import AppConfig
+from ariadne.application.query_rewrite import QueryRewriteResult, QueryRewriteService
 from ariadne.application.text_splitter import TextFragment, split_fragments_from_asset_objects
 from ariadne.domain.models import Asset, utc_now_iso
 from ariadne.infrastructure.app_logger import get_logger
@@ -26,6 +28,14 @@ class RetrievalResult:
     asset_id: str
     text: str
     relevance_score: float
+    order_no: int = 0
+    source_start: int = 0
+    source_end: int = 0
+    block_type: str = "paragraph"
+    section_title: str = ""
+    page_no: int = 0
+    heading_path: list[str] = field(default_factory=list)
+    retrieval_mode: str = "vector"
 
 
 class RAGService:
@@ -43,6 +53,8 @@ class RAGService:
         config: AppConfig,
         vector_store: VectorStore,
         embedding_client: "EmbeddingClient" = None,
+        asset_repo=None,
+        query_rewriter: QueryRewriteService | None = None,
     ) -> None:
         """
         Initialize RAG service.
@@ -55,6 +67,10 @@ class RAGService:
         self.config = config
         self.vector_store = vector_store
         self.embedding_client = embedding_client
+        self.asset_repo = asset_repo
+        self.query_rewriter = query_rewriter or QueryRewriteService()
+        if not self.embedding_client:
+            logger.warning("RAG initialized without embedding client; vector retrieval rewrites will be skipped")
 
     def process_pre_split_fragments(
         self,
@@ -103,6 +119,12 @@ class RAGService:
                 text=frag.text,
                 embedding=embedding,
                 order_no=frag.order_no,
+                source_start=frag.source_start,
+                source_end=frag.source_end,
+                block_type=frag.block_type,
+                section_title=frag.section_title,
+                page_no=frag.page_no,
+                heading_path_text=" > ".join(frag.heading_path),
             )
             doc_fragments.append(doc_fragment)
 
@@ -172,6 +194,12 @@ class RAGService:
                 text=frag.text,
                 embedding=embedding,
                 order_no=frag.order_no,
+                source_start=frag.source_start,
+                source_end=frag.source_end,
+                block_type=frag.block_type,
+                section_title=frag.section_title,
+                page_no=frag.page_no,
+                heading_path_text=" > ".join(frag.heading_path),
             )
             doc_fragments.append(doc_fragment)
 
@@ -191,6 +219,7 @@ class RAGService:
         query_embedding: List[float],
         top_k: int = 3,
         asset_ids: List[str] | None = None,
+        rewrite_context: dict | None = None,
     ) -> List[RetrievalResult]:
         """
         Retrieve relevant fragments for a query.
@@ -204,34 +233,204 @@ class RAGService:
         Returns:
             List of RetrievalResult objects
         """
-        if not query_embedding:
-            logger.warning("Empty query embedding, returning empty results")
-            return []
+        rewrite_context = rewrite_context or {}
+        rewrite_plan = self.query_rewriter.rewrite(query, **rewrite_context)
 
-        fragments = self.vector_store.search(
-            query_embedding=query_embedding,
-            top_k=top_k,
+        vector_results = self._vector_retrieve(
+            rewrite_plan=rewrite_plan,
+            original_embedding=query_embedding,
+            top_k=max(top_k, 3),
             asset_ids=asset_ids,
         )
-
-        results = [
-            RetrievalResult(
-                fragment_id=f.id,
-                asset_id=f.asset_id,
-                text=f.text,
-                relevance_score=1.0,  # Will be replaced by actual scores if available
-            )
-            for f in fragments
-        ]
+        keyword_results = self._keyword_retrieve(
+            rewrite_plan=rewrite_plan,
+            top_k=max(top_k, 3),
+            asset_ids=asset_ids,
+        )
+        results = self._fuse_results(vector_results, keyword_results, top_k=top_k)
 
         logger.info(
-            "Retrieved %d fragments for query (top_k=%d, asset_ids=%s)",
+            "Retrieved %d fragments for query=%s rewrites=%s keywords=%s asset_ids=%s",
             len(results),
-            top_k,
+            query[:120],
+            rewrite_plan.rewrite_queries,
+            rewrite_plan.keywords,
             asset_ids,
         )
-
         return results
+
+    def _vector_retrieve(
+        self,
+        *,
+        rewrite_plan: QueryRewriteResult,
+        original_embedding: List[float],
+        top_k: int,
+        asset_ids: List[str] | None,
+    ) -> List[RetrievalResult]:
+        if not original_embedding:
+            return []
+
+        query_embeddings: list[tuple[str, List[float]]] = [(rewrite_plan.original_query, original_embedding)]
+        extra_queries = [q for q in rewrite_plan.rewrite_queries if q and q != rewrite_plan.original_query]
+        if extra_queries and self.embedding_client:
+            try:
+                extra_embeddings = self.embedding_client.encode(extra_queries)
+                query_embeddings.extend(zip(extra_queries, extra_embeddings))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to embed rewrite queries: %s", exc)
+
+        ranked: dict[str, tuple[float, RetrievalResult]] = {}
+        for query_index, (query_text, embedding) in enumerate(query_embeddings):
+            fragments = self.vector_store.search(
+                query_embedding=embedding,
+                top_k=max(top_k * 2, 5),
+                asset_ids=asset_ids,
+            )
+            for rank, fragment in enumerate(fragments, start=1):
+                score = 1.0 / (60 + rank + query_index)
+                current = ranked.get(fragment.id)
+                result = RetrievalResult(
+                    fragment_id=fragment.id,
+                    asset_id=fragment.asset_id,
+                    text=fragment.text,
+                    relevance_score=fragment.score or score,
+                    order_no=fragment.order_no,
+                    source_start=fragment.source_start,
+                    source_end=fragment.source_end,
+                    block_type=fragment.block_type,
+                    section_title=fragment.section_title,
+                    page_no=fragment.page_no,
+                    heading_path=[x.strip() for x in fragment.heading_path_text.split(" > ") if x.strip()],
+                    retrieval_mode="vector",
+                )
+                if current:
+                    ranked[fragment.id] = (current[0] + score, current[1])
+                else:
+                    ranked[fragment.id] = (score, result)
+
+        return [item[1] for item in sorted(ranked.values(), key=lambda x: x[0], reverse=True)]
+
+    def _keyword_retrieve(
+        self,
+        *,
+        rewrite_plan: QueryRewriteResult,
+        top_k: int,
+        asset_ids: List[str] | None,
+    ) -> List[RetrievalResult]:
+        if not self.asset_repo:
+            return []
+
+        search_terms = self._keyword_terms(rewrite_plan)
+        if not search_terms:
+            return []
+
+        ranked: list[tuple[float, RetrievalResult]] = []
+        for payload in self.asset_repo.iter_fragments(asset_ids):
+            score = self._score_fragment(payload, search_terms)
+            if score <= 0:
+                continue
+            heading_path = payload.get("heading_path") or []
+            if isinstance(heading_path, str):
+                heading_path = [x.strip() for x in heading_path.split(" > ") if x.strip()]
+            ranked.append(
+                (
+                    score,
+                    RetrievalResult(
+                        fragment_id=payload.get("fragment_id", ""),
+                        asset_id=payload.get("asset_id", ""),
+                        text=payload.get("text", ""),
+                        relevance_score=score,
+                        order_no=int(payload.get("order_no", 0)),
+                        source_start=int(payload.get("source_start", 0)),
+                        source_end=int(payload.get("source_end", 0)),
+                        block_type=payload.get("block_type", "paragraph"),
+                        section_title=payload.get("section_title", ""),
+                        page_no=int(payload.get("page_no", 0)),
+                        heading_path=list(heading_path),
+                        retrieval_mode="keyword",
+                    ),
+                )
+            )
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        return [item[1] for item in ranked[: max(top_k * 2, 5)]]
+
+    def _keyword_terms(self, rewrite_plan: QueryRewriteResult) -> list[str]:
+        values = list(rewrite_plan.keywords)
+        if not values:
+            values = self.query_rewriter.extract_keywords(" ".join(rewrite_plan.all_queries()))
+        if not values:
+            values = [rewrite_plan.original_query]
+        seen: set[str] = set()
+        result: list[str] = []
+        for value in values:
+            normalized = value.strip()
+            if len(normalized) < 2 or normalized in seen:
+                continue
+            seen.add(normalized)
+            result.append(normalized)
+        return result[:10]
+
+    def _score_fragment(self, payload: dict, terms: list[str]) -> float:
+        text = str(payload.get("text", "") or "")
+        if not text:
+            return 0.0
+        haystack = text.lower()
+        section = str(payload.get("section_title", "") or "").lower()
+        heading_text = " ".join(payload.get("heading_path") or []).lower()
+        score = 0.0
+        for term in terms:
+            lowered = term.lower()
+            if not lowered:
+                continue
+            if lowered in haystack:
+                if re.fullmatch(r"[a-z0-9._/-]+", lowered):
+                    score += 4.5
+                elif re.search(r"[\u4e00-\u9fff]", lowered):
+                    score += 3.5
+                else:
+                    score += 2.5
+            if lowered and section and lowered in section:
+                score += 2.0
+            if lowered and heading_text and lowered in heading_text:
+                score += 1.5
+        return score
+
+    def _fuse_results(
+        self,
+        vector_results: List[RetrievalResult],
+        keyword_results: List[RetrievalResult],
+        *,
+        top_k: int,
+    ) -> List[RetrievalResult]:
+        fused: dict[str, tuple[float, RetrievalResult]] = {}
+
+        def absorb(results: List[RetrievalResult], source: str) -> None:
+            for rank, result in enumerate(results, start=1):
+                score = 1.0 / (60 + rank)
+                current = fused.get(result.fragment_id)
+                merged_mode = source if not current else f"{current[1].retrieval_mode}+{source}"
+                merged = RetrievalResult(
+                    fragment_id=result.fragment_id,
+                    asset_id=result.asset_id,
+                    text=result.text,
+                    relevance_score=max(result.relevance_score, current[1].relevance_score if current else 0.0),
+                    order_no=result.order_no,
+                    source_start=result.source_start,
+                    source_end=result.source_end,
+                    block_type=result.block_type,
+                    section_title=result.section_title,
+                    page_no=result.page_no,
+                    heading_path=list(result.heading_path),
+                    retrieval_mode=merged_mode,
+                )
+                if current:
+                    fused[result.fragment_id] = (current[0] + score, merged)
+                else:
+                    fused[result.fragment_id] = (score, merged)
+
+        absorb(vector_results, "vector")
+        absorb(keyword_results, "keyword")
+        return [item[1] for item in sorted(fused.values(), key=lambda x: x[0], reverse=True)[:top_k]]
 
     def format_context_for_prompt(
         self,

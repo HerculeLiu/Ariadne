@@ -95,6 +95,9 @@ class AriadneAPI:
                         "title": chunk.title,
                         "content": chunk.content,
                         "order_no": chunk.order_no,
+                        "chapter_no": chunk.chapter_no,
+                        "chunk_no": chunk.chunk_no,
+                        "page_id": chunk.page_id,
                         "understand_state": getattr(chunk, "understand_state", "unknown"),
                         "is_favorite": getattr(chunk, "is_favorite", False),
                         "collapsed": getattr(chunk, "collapsed", False),
@@ -225,6 +228,7 @@ class AriadneAPI:
                 continue_from_message_id=payload.get("continue_from_message_id"),
                 asset_ids=payload.get("asset_ids"),
                 selected_context=payload.get("selected_context"),
+                selected_chunk_ids=payload.get("selected_chunk_ids"),
             )
             return self._ok(result)
         except AriadneError as exc:
@@ -492,3 +496,17 @@ class AriadneAPI:
                     return cw, chunk
 
         raise NotFoundError(f"chunk not found: {chunk_key}")
+
+    def delete_chunk(self, chunk_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            courseware_id = payload.get("courseware_id", "")
+            if not courseware_id:
+                return self._error(NotFoundError("courseware_id is required"))
+            result = self.courseware.delete_chunk(
+                courseware_id=courseware_id,
+                chunk_id=chunk_id,
+                expected_version=int(payload.get("expected_version", 0)),
+            )
+            return self._ok({"chunk_id": chunk_id, "courseware_id": courseware_id, **result})
+        except AriadneError as exc:
+            return self._error(exc)

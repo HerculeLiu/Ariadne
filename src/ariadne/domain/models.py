@@ -141,6 +141,7 @@ class ChatMessage:
     content: str
     created_at: str
     selected_context: str = ""
+    selected_chunk_ids: List[str] = field(default_factory=list)
     asset_ids: List[str] = field(default_factory=list)
     sources: List[Dict[str, object]] = field(default_factory=list)
 

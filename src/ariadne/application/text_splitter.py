@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, List
 
@@ -29,6 +29,10 @@ class TextFragment:
     order_no: int
     source_start: int
     source_end: int
+    heading_path: List[str] = field(default_factory=list)
+    block_type: str = "paragraph"
+    section_title: str = ""
+    page_no: int = 0
 
 
 class RecursiveTextSplitter:
@@ -82,7 +86,11 @@ class RecursiveTextSplitter:
 
         text = text.strip()
         if len(text) <= self.max_length:
-            return [TextFragment(text=text, order_no=0, source_start=0, source_end=len(text))]
+            return [TextFragment(text=text, order_no=0, source_start=0, source_end=len(text), heading_path=[], block_type="paragraph", section_title="", page_no=0)]
+
+        structured = self._split_by_blocks(text)
+        if structured:
+            return structured
 
         fragments: List[TextFragment] = []
         order_no = 0
@@ -162,6 +170,196 @@ class RecursiveTextSplitter:
         )
 
         return fragments
+
+    def _split_by_blocks(self, text: str) -> List[TextFragment]:
+        blocks = self._extract_blocks(text)
+        content_blocks = [block for block in blocks if block["kind"] != "heading"]
+        if not content_blocks:
+            return []
+
+        fragments: List[TextFragment] = []
+        order_no = 0
+        current_texts: list[str] = []
+        current_start = 0
+        current_end = 0
+        current_heading_path: list[str] = []
+        current_section_title = ""
+        current_block_type = "paragraph"
+
+        def flush() -> None:
+            nonlocal order_no, current_texts, current_start, current_end, current_heading_path, current_section_title, current_block_type
+            if not current_texts:
+                return
+            text_value = "\n\n".join(current_texts).strip()
+            if not text_value:
+                current_texts = []
+                return
+            fragments.append(
+                TextFragment(
+                    text=text_value,
+                    order_no=order_no,
+                    source_start=current_start,
+                    source_end=current_end,
+                    heading_path=list(current_heading_path),
+                    block_type=current_block_type,
+                    section_title=current_section_title,
+                    page_no=0,
+                )
+            )
+            order_no += 1
+            current_texts = []
+
+        for block in content_blocks:
+            block_text = block["text"]
+            if len(block_text) > self.max_length:
+                flush()
+                for part in self._split_large_block(block_text, int(block["start"]), list(block["heading_path"]), block["kind"]):
+                    part.order_no = order_no
+                    fragments.append(part)
+                    order_no += 1
+                continue
+
+            heading_changed = bool(current_texts) and block["heading_path"] != current_heading_path
+            would_overflow = bool(current_texts) and (len("\n\n".join(current_texts)) + 2 + len(block_text) > self.max_length)
+
+            if heading_changed or would_overflow:
+                flush()
+
+            if not current_texts:
+                current_start = int(block["start"])
+                current_heading_path = list(block["heading_path"])
+                current_section_title = block["section_title"]
+                current_block_type = block["kind"]
+
+            current_texts.append(block_text)
+            current_end = int(block["end"])
+            if current_block_type != block["kind"]:
+                current_block_type = "mixed"
+
+        flush()
+        return fragments
+
+    def _split_large_block(
+        self,
+        text: str,
+        source_start: int,
+        heading_path: List[str],
+        block_type: str,
+    ) -> List[TextFragment]:
+        pieces: List[TextFragment] = []
+        offset = 0
+        order_no = 0
+        while offset < len(text):
+            end = min(offset + self.max_length, len(text))
+            segment_end = self._find_sentence_boundary(text, offset, end)
+            if segment_end == offset:
+                segment_end = end
+            if segment_end <= offset:
+                segment_end = min(len(text), offset + self.max_length)
+            segment = text[offset:segment_end].strip()
+            if segment:
+                pieces.append(
+                    TextFragment(
+                        text=segment,
+                        order_no=order_no,
+                        source_start=source_start + offset,
+                        source_end=source_start + segment_end,
+                        heading_path=list(heading_path),
+                        block_type=block_type,
+                        section_title=heading_path[-1] if heading_path else "",
+                        page_no=0,
+                    )
+                )
+                order_no += 1
+            if segment_end >= len(text):
+                break
+            offset = max(segment_end - self.overlap, offset + 1)
+        return pieces
+
+    def _extract_blocks(self, text: str) -> List[dict]:
+        blocks: List[dict] = []
+        current_path: list[str] = []
+        last_end = 0
+        for match in re.finditer(r"(?:^|\n\s*\n+)(.*?)(?=\n\s*\n+|\Z)", text, flags=re.S):
+            start, end = match.span(1)
+            start, end = self._trim_span(text, start, end)
+            if start >= end:
+                continue
+            block_text = text[start:end]
+            kind, level, heading_text = self._classify_block(block_text)
+            if kind == "heading":
+                if level <= 1:
+                    current_path = [heading_text]
+                else:
+                    while len(current_path) >= level:
+                        current_path.pop()
+                    current_path.append(heading_text)
+                blocks.append(
+                    {
+                        "kind": "heading",
+                        "text": heading_text,
+                        "start": start,
+                        "end": end,
+                        "heading_path": list(current_path),
+                        "section_title": heading_text,
+                    }
+                )
+            else:
+                blocks.append(
+                    {
+                        "kind": kind,
+                        "text": block_text.strip(),
+                        "start": start,
+                        "end": end,
+                        "heading_path": list(current_path),
+                        "section_title": current_path[-1] if current_path else "",
+                    }
+                )
+            last_end = end
+        if not blocks and text.strip():
+            blocks.append({"kind": "paragraph", "text": text.strip(), "start": 0, "end": len(text), "heading_path": [], "section_title": ""})
+        return blocks
+
+    def _trim_span(self, text: str, start: int, end: int) -> tuple[int, int]:
+        while start < end and text[start].isspace():
+            start += 1
+        while end > start and text[end - 1].isspace():
+            end -= 1
+        return start, end
+
+    def _classify_block(self, block_text: str) -> tuple[str, int, str]:
+        lines = [line.strip() for line in block_text.splitlines() if line.strip()]
+        if not lines:
+            return ("paragraph", 0, "")
+        first = lines[0]
+
+        markdown_heading = re.match(r"^(#{1,6})\s+(.+)$", first)
+        if markdown_heading:
+            return ("heading", len(markdown_heading.group(1)), markdown_heading.group(2).strip())
+
+        if len(lines) == 1 and self._looks_like_heading(first):
+            return ("heading", 1, first.strip())
+
+        if all(
+            line.startswith(("-", "*", "•"))
+            or bool(re.match(r"^\d+[\.\)]\s+", line))
+            for line in lines
+        ):
+            return ("list", 0, "")
+
+        return ("paragraph", 0, "")
+
+    def _looks_like_heading(self, line: str) -> bool:
+        text = (line or "").strip()
+        if not text:
+            return False
+        if re.match(r"^(第[\d一二三四五六七八九十百千]+[章节部分篇])", text):
+            return True
+        if re.match(r"^[\dIVXivx]+(?:\.[\dIVXivx]+)*[\.\)]?\s+\S+", text):
+            return True
+        if re.match(r"^[一二三四五六七八九十]+[、.．]\s*\S+", text):
+            return True
+        return len(text) <= 42 and "\n" not in text and not text.endswith(("。", ".", "!", "！", "?", "？"))
 
     def _find_paragraph_boundary(self, text: str, start: int, end: int) -> int:
         """Find the nearest paragraph boundary before end position."""
