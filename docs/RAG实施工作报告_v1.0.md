@@ -1,319 +1,269 @@
-# RAG 框架实施工作报告
+# RAG 实施工作报告（历史 + 当前状态）
 
-**日期**: 2025-03-06
-**版本**: v1.0
-**状态**: 已完成
-
----
-
-## 1. 执行摘要
-
-成功实现了 Ariadne 项目的 RAG (检索增强生成) 框架 v1.0，包括：
-
-- ✅ GLM Embedding-3 API 客户端
-- ✅ GLM Rerank API 客户端
-- ✅ 递归文本切分器
-- ✅ ChromaDB 向量存储
-- ✅ RAG 服务层
-- ✅ 生成流程集成
-- ✅ 所有组件测试通过
+**初始版本日期**：2025-03-06  
+**当前修订日期**：2026-03-07  
+**状态**：已落地并持续演进
 
 ---
 
-## 2. 实施内容
+## 1. 文档定位
 
-### 2.1 新增文件
+这份文档最初用于记录 Ariadne 的 RAG v1.0 落地。  
+现在系统已经明显超出当时范围，因此本文保留“历史起点”说明，同时补充 **当前真实实现**。
 
-| 文件 | 说明 |
+本文不再把“只基于上传文件的单路 RAG”当成现状。
+
+---
+
+## 2. v1.0 历史起点
+
+最早落地的能力包括：
+
+1. Embedding 客户端
+2. 向量存储
+3. 文本切分器
+4. `RAGService`
+5. 生成阶段接入 `asset_ids`
+
+当时的主要目标是：
+- 让课件生成可以参考用户上传文件
+- 将上传文件切片后写入本地向量库存储
+
+---
+
+## 3. 当前状态概览
+
+当前 Ariadne 的检索链已经升级为：
+
+### 3.1 双路检索
+
+1. `courseware chunks`
+2. `source fragments`
+
+这意味着 chat 不再只查源文件，也会查当前课件自己的 chunk。
+
+### 3.2 Query Rewrite
+
+当前检索前会做一层 query rewrite，用于：
+- 短问题扩展
+- 指代问题补全
+- 中文问句关键词提取
+
+### 3.3 关键词检索
+
+当前不是只做向量检索。  
+对于 fragment 还会做本地关键词检索，适合处理：
+- 人名
+- 项目名
+- 编号
+- 文件名
+- 短专有词
+
+### 3.4 Selected Chunk 语义调整
+
+当前 `selected chunks` 的语义是：
+- 软优先级
+- 检索加权信号
+
+而不是：
+- 硬绑定上下文
+- 只和 selected 的内容对话
+
+这解决了“用户忘记取消 selected 但已经切换话题”的问题。
+
+---
+
+## 4. 当前 RAG 架构
+
+```mermaid
+flowchart TD
+  Q["User Query"] --> RW["Query Rewrite"]
+  RW --> CR["Courseware Chunk Retrieval"]
+  RW --> SR["Source Fragment Retrieval"]
+  SC["Selected Chunk IDs"] --> CR
+  CR --> F["Fuse Context"]
+  SR --> F
+  F --> LLM["LLM Reply / Generation / QA"]
+```
+
+### 4.1 生成阶段
+
+当前生成链路的 RAG 使用位置：
+
+1. **Outline 阶段**
+   - 先用 topic 对上传资料做检索
+   - 再把检索结果注入 `outline_layer`
+
+2. **Chunk 生成阶段**
+   - 对每个 chunk 再做检索
+   - 把检索结果注入 `explain_layer`
+
+### 4.2 Chat 阶段
+
+当前 chat 会同时检索：
+
+1. 当前课件 chunks
+2. 当前课件绑定的 source assets
+
+这意味着：
+- 不选 chunk，也能问“第 1 章第 2 个 chunk 在讲什么”
+- 选了 chunk，只会提高相关 chunk 的命中权重
+
+### 4.3 QA 阶段
+
+chunk QA 现在也会使用：
+- 当前 chunk 内容
+- source fragments 检索结果
+
+---
+
+## 5. 切块策略演进
+
+### 5.1 v1.0
+
+早期切块主要依赖：
+- 段落边界
+- 句子边界
+- 固定长度
+
+### 5.2 当前实现
+
+当前切块已经升级为结构感知 fragment：
+
+每个 fragment 会带：
+- `heading_path`
+- `block_type`
+- `section_title`
+- `page_no`
+- `source_start`
+- `source_end`
+
+这使得：
+- 调试更容易
+- 关键词搜索更有依据
+- 结果解释更清晰
+
+---
+
+## 6. 当前实现文件
+
+### 核心代码
+
+| 文件 | 职责 |
 |------|------|
-| `src/ariadne/llm/embedding_client.py` | GLM Embedding-3 API 客户端 |
-| `src/ariadne/llm/rerank_client.py` | GLM Rerank API 客户端 |
-| `src/ariadne/application/text_splitter.py` | 递归文本切分器 |
-| `src/ariadne/infrastructure/vector_store.py` | ChromaDB 向量存储封装 |
-| `src/ariadne/application/rag_service.py` | RAG 服务层 |
-| `tests/test_rag.py` | RAG 组件测试套件 |
-| `docs/RAG技术框架方案_v1.0.md` | 技术方案文档 |
+| `src/ariadne/application/query_rewrite.py` | Query rewrite 与关键词抽取 |
+| `src/ariadne/application/rag_service.py` | 向量检索 + 关键词检索 + 融合 |
+| `src/ariadne/application/text_splitter.py` | 结构感知切块 |
+| `src/ariadne/infrastructure/vector_store.py` | 本地向量存储 |
+| `src/ariadne/application/services.py` | 生成 / chat / QA / chunk 删除等 RAG 接入 |
+| `src/ariadne/infrastructure/repositories.py` | 本地文件持久化与 fragment 落盘 |
 
-### 2.2 修改文件
+### 前端相关
 
-| 文件 | 修改内容 |
-|------|----------|
-| `src/ariadne/llm/agent.py` | `generate_chunk_content` 增加 `rag_context` 参数 |
-| `src/ariadne/application/services.py` | 集成 RAG 服务，支持 `asset_ids` 参数 |
-| `src/ariadne/api/facade.py` | API 接口支持 `asset_ids` 传递 |
+| 文件 | 职责 |
+|------|------|
+| `frontend/templates/courseware_shell.html` | 课件聊天、selected chunk、chunk 删除、局部同步 |
 
 ---
 
-## 3. 组件详情
+## 7. 当前持久化形态
 
-### 3.1 Embedding 客户端
+当前 RAG 相关数据不依赖数据库，而是本地文件持久化：
 
-```python
-from ariadne.llm.embedding_client import EmbeddingClient
-
-client = EmbeddingClient(config)
-embeddings = client.encode(["文本1", "文本2"])
-# Returns: List[List[float]] with dimension 2048
+```text
+storage/
+  assets/
+    as_xxx/
+      meta.json
+      source.pdf
+      fragments.json
+  coursewares/
+    cw_xxx/
+      meta.json
+      chunks/
+      chats/
+      snapshots/
 ```
 
-**特性**:
-- 支持 GLM Embedding-3 API
-- 批量编码支持
-- 自动重试机制
-- Mock 模式支持（用于测试）
-
-### 3.2 Rerank 客户端
-
-```python
-from ariadne.llm.rerank_client import RerankClient
-
-client = RerankClient(config)
-results = client.rerank("查询文本", ["文档1", "文档2"], top_n=3)
-# Returns: List[RerankResult] with relevance scores
-```
-
-**特性**:
-- 支持文档重排序
-- 返回相关性得分
-- 最多支持 128 个候选文档
-
-### 3.3 文本切分器
-
-```python
-from ariadne.application.text_splitter import RecursiveTextSplitter
-
-splitter = RecursiveTextSplitter(max_length=800, overlap=100)
-fragments = splitter.split_text("长文本...")
-# Returns: List[TextFragment]
-```
-
-**切分优先级**:
-1. 段落边界 (`\n\n`)
-2. 句子边界 (`。！？`)
-3. 固定长度
-
-### 3.4 向量存储
-
-```python
-from ariadne.infrastructure.vector_store import VectorStore, DocumentFragment
-
-store = VectorStore(config)
-store.add_fragments([DocumentFragment(...)])
-results = store.search(query_embedding, top_k=3)
-```
-
-**特性**:
-- 基于 ChromaDB
-- 本地持久化存储
-- 支持按 asset_id 过滤
-- 支持删除操作
-
-### 3.5 RAG 服务
-
-```python
-from ariadne.application.rag_service import RAGService
-
-rag = RAGService(config, vector_store)
-results = rag.retrieve(query, query_embedding, top_k=3)
-context = rag.format_context_for_prompt(results)
-```
-
-**特性**:
-- 统一的检索接口
-- Prompt 格式化
-- Asset 管理
+其中：
+- `fragments.json` 是关键词检索和调试的重要输入
+- 向量数据由向量库存储
+- chat / chunk / snapshot 也都已经文件化
 
 ---
 
-## 4. 集成流程
+## 8. 当前解决的问题
 
-### 4.1 API 调用
+相比最早版本，当前实现已经解决了这些关键问题：
 
-```bash
-# 普通模式（无 RAG）
-POST /api/v1/coursewares/generate
-{
-  "topic": "机器学习基础",
-  "keywords": ["AI"]
-}
+1. **生成阶段不再只靠模型裸写大纲**
+   - outline 也接入了检索
 
-# RAG 模式
-POST /api/v1/coursewares/generate
-{
-  "topic": "机器学习基础",
-  "keywords": ["AI"],
-  "asset_ids": ["asset_1", "asset_2"]  # 可选
-}
-```
+2. **chat 不再只检索 source files**
+   - 也会检索 `courseware chunks`
 
-### 4.2 生成流程
+3. **selected chunk 不再是强上下文**
+   - 变成软加权，避免误导回答
 
-```
-有 asset_ids？
-    │
-    ├─ NO → 普通模式（原流程）
-    │
-    └─ YES → RAG 模式
-              │
-              ├─ 每个 chunk 生成时：
-              │   ├─ 构造查询: 章节标题 + chunk 标题
-              │   ├─ 调用 Embedding API
-              │   ├─ 向量检索 top-3
-              │   ├─ 格式化为 context
-              │   └─ 注入 prompt
-```
+4. **中文短问题更容易命中**
+   - 例如：`古诗讲的是什么`
+
+5. **专有名词召回更稳**
+   - 通过关键词检索增强
 
 ---
 
-## 5. 测试结果
+## 9. 当前已知边界
 
-### 5.1 测试套件执行
+1. 排序权重仍有调优空间  
+   特别是：
+   - 标题精确匹配
+   - 中文短词 vs 长词
+   - selected boost 的权重
 
-```bash
-$ python3 tests/test_rag.py
+2. 切块质量仍然依赖原始文档结构  
+   PDF / OCR 质量差时，fragment 质量会受影响
 
-============================================================
-Ariadne RAG Framework Test Suite
-============================================================
-
-=== Testing Embedding Client ===
-✓ Encoded 2 texts
-  Embedding dimension: 2048
-
-=== Testing Rerank Client ===
-✓ Reranked 3 documents
-
-=== Testing Text Splitter ===
-✓ Split text into 2 fragments
-
-=== Testing Vector Store ===
-✓ Added 3 fragments to vector store
-✓ Search returned 2 results
-
-=== Testing RAG Integration ===
-  - Model provider: glm
-  - API key configured: True
-
-============================================================
-Test Summary
-============================================================
-  ✓ PASS - embedding
-  ✓ PASS - rerank
-  ✓ PASS - splitter
-  ✓ PASS - vector_store
-  ✓ PASS - integration
-
-All tests passed!
-```
-
-### 5.2 功能测试
-
-| 测试项 | 结果 | 说明 |
-|--------|------|------|
-| 普通模式生成 | ✅ 通过 | 无 asset_ids 时正常生成 |
-| Embedding API | ✅ 通过 | 返回 2048 维向量 |
-| Rerank API | ✅ 通过 | 返回相关性得分 |
-| 文本切分 | ✅ 通过 | 正确按段落/句子切分 |
-| 向量存储 | ✅ 通过 | ChromaDB 存储和检索正常 |
-| 端到端生成 | ✅ 通过 | 19 chunks 全部生成完成 |
+3. 旧资产如果来自旧切块版本，可能需要重建索引  
+   否则新旧 fragment 结构会混用
 
 ---
 
-## 6. 依赖项
+## 10. 当前建议
 
-### 6.1 新增 Python 包
+### 短期
 
-```
-chromadb==1.5.2
-```
+1. 持续调优 chunk 检索排序权重
+2. 为检索命中增加更可观测的 debug 输出
+3. 为重建索引提供显式命令或工具
 
-### 6.2 安装命令
+### 中期
 
-```bash
-pip3 install chromadb
-```
+1. 让 courseware chunk retrieval 支持更强的语义匹配
+2. 统一 selected chunk、引用卡片、chunk delete 后的元数据稳定性
 
----
+### 长期
 
-## 7. 配置说明
-
-### 7.1 环境变量
-
-RAG 框架使用现有的 GLM API 配置：
-
-```bash
-# 已有配置
-MODEL_PROVIDER=glm
-GLM_API_KEY=your_api_key_here
-GLM_API_BASE=https://open.bigmodel.cn/api/coding/paas/v4
-```
-
-### 7.2 向量存储路径
-
-向量数据存储在：
-```
-storage/vectors/  # ChromaDB 持久化目录
-```
-
----
-
-## 8. 待实现功能
-
-以下功能在文档中规划但未在本次实现：
-
-### 8.1 文件解析增强
-- 当前：Asset 文本提取功能未完全实现
-- 计划：支持 PDF/MD/TXT/DOCX 的文本提取
-
-### 8.2 完整 RAG 工作流
-- 当前：框架就绪，但文件→向量流程未完整实现
-- 计划：上传文件 → 解析 → 切分 → 向量化 → 检索
-
-### 8.3 搜索集成
-- 当前：仅支持文件 RAG
-- 计划：后续增加网络搜索功能
-
----
-
-## 9. 已知限制
-
-1. **文件解析**: 当前 Asset 系统已支持文件上传，但文本提取功能需进一步增强
-2. **向量维度**: 固定使用 2048 维，可在后续优化
-3. **并发控制**: 向量化操作未做并发限制，大量文件时需注意
-
----
-
-## 10. 下一步建议
-
-### 短期（P0）
-1. 完善文件文本提取功能
-2. 实现上传文件自动向量化流程
-3. 添加文件管理 API（删除/查看片段）
-
-### 中期（P1）
-1. 添加 Rerank 二次排序优化
-2. 实现检索缓存机制
-3. 支持更长的上下文（chunk 级联检索）
-
-### 长期（P2）
-1. 网络搜索集成
-2. 混合检索策略（关键词+向量）
-3. 多模态支持（图片、表格）
+1. 视需要决定是否演进到更复杂的索引层
+2. 仅在本地文件索引不足时，再考虑数据库或独立检索服务
 
 ---
 
 ## 11. 总结
 
-RAG 框架 v1.0 已成功实现并通过测试。所有核心组件（Embedding、Rerank、切分、向量存储、服务层）均已就绪，可以支持基于用户文件的检索增强生成。
+这份报告最重要的结论是：
 
-**代码统计**:
-- 新增文件: 7 个
-- 修改文件: 3 个
-- 新增代码: 约 1500 行
+**Ariadne 当前的 RAG 已经不是“用户上传文件 -> 向量检索 -> 生成”这么简单。**
 
-**测试覆盖**: 所有组件单元测试通过
+当前真实实现是：
 
----
+1. 生成阶段接入检索
+2. chat 阶段接入 `courseware chunks + source fragments` 双路检索
+3. selected chunk 只做软优先级
+4. fragment 已经结构化
+5. 所有关键状态都以本地文件为主进行持久化
 
-**报告生成时间**: 2025-03-06
-**报告生成人**: Claude (Ariadne 项目)
+因此，这份文档应理解为：
+
+- 记录 v1.0 的起点
+- 同时明确当前系统已经演进到混合检索与本地文件持久化的更完整形态
