@@ -244,6 +244,11 @@
     .chunk-card.flash-added {{
       animation: chunkFlash 0.9s ease;
     }}
+    .chunk-card.flash-highlight {{
+      animation: chunkFlash 1.05s ease;
+      border-color: #8fb3a3 !important;
+      box-shadow: 0 0 0 3px rgba(63,118,97,.14), var(--card-shadow) !important;
+    }}
     @keyframes chunkFlash {{
       0% {{ box-shadow: 0 0 0 0 rgba(63,118,97,.0), var(--card-shadow); }}
       35% {{ box-shadow: 0 0 0 6px rgba(63,118,97,.22), var(--card-shadow); }}
@@ -572,15 +577,37 @@
       border-color: #d8cdbd;
       border-radius: 14px 14px 0 0;
     }}
-    .chat-selected-row span {{
+    .chat-selected-label {{
+      appearance: none;
+      border: none;
+      background: transparent;
+      padding: 0;
+      margin: 0;
+      min-width: 0;
+      width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      min-width: 0;
+      text-align: left;
       font-size: 12px;
       line-height: 1.1;
+      color: inherit;
+      cursor: pointer;
+      transition: color 0.15s ease, transform 0.15s ease;
     }}
-    .chat-selected-row:not(:first-child) span {{
+    .chat-selected-label:hover {{
+      color: #2f5d4c;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 2px;
+    }}
+    .chat-selected-label:active {{ transform: translateY(1px); }}
+    .chat-selected-label:focus-visible {{
+      outline: 2px solid rgba(47,93,76,.35);
+      outline-offset: 2px;
+      border-radius: 6px;
+    }}
+    .chat-selected-row:not(:first-child) .chat-selected-label {{
       font-size: 11px;
       line-height: 1;
     }}
@@ -1054,7 +1081,7 @@
           const location = match ? `Chapter ${{match[1]}}, Chunk ${{match[2]}}` : chunk.label;
           const title = chunk.title || chunk.label;
           return `
-          <div class='msg-ref-card' onclick='jumpToChunk("${{esc(chunk.key || '')}}")' title='点击跳转'>
+          <div class='msg-ref-card' data-chunk-key='${{escAttr(chunk.key || '')}}' title='点击跳转'>
             <div class='msg-ref-title'>${{esc(title)}}</div>
             <div class='msg-ref-subtitle'>${{esc(location)}}</div>
           </div>
@@ -1202,7 +1229,15 @@
         const continuous = String(RENDER_CONFIG.layout_mode || 'continuous').toLowerCase() === 'continuous';
         if (continuous) {{
           const anchor = document.getElementById(`chunk-${{chapterIdx}}-${{chunkIdx}}`);
-          if (anchor) anchor.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+          if (anchor) {{
+            anchor.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+            triggerChunkHighlight(anchor);
+          }}
+        }} else {{
+          const card = $('chunkCard');
+          if (card) {{
+            triggerChunkHighlight(card);
+          }}
         }}
       }}
     }}
@@ -1530,6 +1565,23 @@
     function esc(s) {{
       return String(s || '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');
     }}
+    function escAttr(s) {{
+      return esc(s).replaceAll('"','&quot;').replaceAll("'", '&#39;');
+    }}
+    function triggerChunkHighlight(el) {{
+      if (!el) return;
+      if (el.__chunkHighlightTimeout) {{
+        window.clearTimeout(el.__chunkHighlightTimeout);
+        el.__chunkHighlightTimeout = null;
+      }}
+      el.classList.remove('flash-highlight');
+      void el.offsetWidth;
+      el.classList.add('flash-highlight');
+      el.__chunkHighlightTimeout = window.setTimeout(() => {{
+        el.classList.remove('flash-highlight');
+        el.__chunkHighlightTimeout = null;
+      }}, 1200);
+    }}
     function normalizeEscapes(text) {{
       // Convert literal escape sequences from model output into visible HTML line breaks.
       return String(text || '')
@@ -1792,7 +1844,10 @@
       tray.style.setProperty('--stack-peek', `${{peek}}px`);
       tray.style.height = `${{cardH + (n > 1 ? (n - 1) * (peek * 2) : 0)}}px`;
       tray.innerHTML = chatState.selectedChunks.map((x, idx) => (
-        `<div class='chat-selected-row' style='--stack-index:${{idx * 2}};'><span>${{esc(x.label)}}</span><button class='chat-selected-remove' type='button' onclick=\"removeSelectedChunk('${{esc(x.key)}}')\" title='取消加入'>×</button></div>`
+        `<div class='chat-selected-row' style='--stack-index:${{idx * 2}};'>
+          <button class='chat-selected-label' type='button' data-chunk-key='${{escAttr(x.key)}}' title='跳转到此 Chunk'>${{esc(x.label)}}</button>
+          <button class='chat-selected-remove' type='button' data-remove-key='${{escAttr(x.key)}}' title='取消加入'>×</button>
+        </div>`
       )).join('');
     }}
     function renderCard() {{
@@ -2061,6 +2116,35 @@
     $('chatSendBtn').onclick = sendChatMessage;
     $('newChatBtn').onclick = createNewChat;
     $('historyToggleBtn').onclick = toggleHistoryPanel;
+    const chatListEl = $('chatList');
+    if (chatListEl) {{
+      chatListEl.addEventListener('click', (e) => {{
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+        const refCard = target.closest('.msg-ref-card');
+        if (!(refCard instanceof HTMLElement)) return;
+        const jumpKey = refCard.getAttribute('data-chunk-key') || '';
+        if (jumpKey) jumpToChunk(jumpKey);
+      }});
+    }}
+    const chatSelectedTray = $('chatSelected');
+    if (chatSelectedTray) {{
+      chatSelectedTray.addEventListener('click', (e) => {{
+        const target = e.target instanceof Element ? e.target : null;
+        if (!target) return;
+        const removeBtn = target.closest('.chat-selected-remove');
+        if (removeBtn instanceof HTMLElement) {{
+          const removeKey = removeBtn.getAttribute('data-remove-key') || '';
+          if (removeKey) removeSelectedChunk(removeKey);
+          return;
+        }}
+        const jumpBtn = target.closest('.chat-selected-label');
+        if (jumpBtn instanceof HTMLElement) {{
+          const jumpKey = jumpBtn.getAttribute('data-chunk-key') || '';
+          if (jumpKey) jumpToChunk(jumpKey);
+        }}
+      }});
+    }}
     $('chatInput').addEventListener('compositionstart', () => {{
       chatState.inputComposing = true;
     }});
