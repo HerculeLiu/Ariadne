@@ -1562,6 +1562,10 @@
     }}
     function renderStoredChatMessage(msg) {{
       if (!msg) return;
+      // Skip compressed messages - they are already represented by the summary message
+      if (msg.is_compressed) {{
+        return;
+      }}
       if (msg.role === 'user') {{
         appendChat('user', msg.content || '', resolveStoredMessageChunks(msg));
         return;

@@ -247,6 +247,14 @@ class AriadneAPI:
         except AriadneError as exc:
             return self._error(exc)
 
+    def delete_chat_session(self, session_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            courseware_id = payload.get("courseware_id", "")
+            result = self.chat.delete_session(session_id, courseware_id=courseware_id or None)
+            return self._ok({"deleted": result, "session_id": session_id})
+        except AriadneError as exc:
+            return self._error(exc)
+
     def list_history_coursewares(self, limit: int = 80) -> Dict[str, Any]:
         try:
             rows = self.history.list_coursewares(limit=limit)

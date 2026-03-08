@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple
 from uuid import uuid4
 
 from ariadne.application.config import load_config
+from ariadne.application.context_compression import ContextCompressionService, CompressionConfig
 from ariadne.application.file_parser import FileParserService, _flush_logs
 from ariadne.application.knowledge import KnowledgeDocStore, chunks_to_markdown, markdown_to_chunks, markdown_to_html
 from ariadne.application.query_rewrite import QueryRewriteService
@@ -919,6 +920,7 @@ class ChatService:
         rag_service: "RAGService" = None,
         embedding_client: "EmbeddingClient" = None,
         courseware_service: "CoursewareService" = None,
+        compression_config: CompressionConfig | None = None,
     ) -> None:
         self.sessions = sessions
         self.messages = messages
@@ -927,6 +929,10 @@ class ChatService:
         self.rag_service = rag_service
         self.embedding_client = embedding_client
         self.courseware_service = courseware_service
+        self.compression_service = ContextCompressionService(
+            llm=llm,
+            config=compression_config or CompressionConfig(max_context_tokens=16000),
+        )
 
     def _extract_chunk_reference(self, query: str) -> tuple[int | None, int | None]:
         text = (query or "").strip()
@@ -1099,6 +1105,18 @@ class ChatService:
         if not session.title or session.title == "新对话":
             session.title = message[:24]
 
+        # Load and compress chat history before RAG
+        historical_messages = self.messages.list_by_session(session_id)
+        compressed_messages, chat_compression_result = self.compression_service.compress_chat_messages(
+            [m for m in historical_messages if m.id != user_msg.id]  # Exclude current message
+        )
+
+        # Convert to chat_history format for LLM (carry last 10 rounds)
+        chat_history = [
+            {"role": m.role, "content": m.content}
+            for m in compressed_messages[-12:]
+        ]
+
         source_rag_context = ""
         if (effective_asset_ids or effective_search_result_ids) and self.rag_service:
             try:
@@ -1152,10 +1170,23 @@ class ChatService:
             combined_context_parts.append(f"【原始资料】\n{source_rag_context}")
         combined_rag_context = "\n\n".join(combined_context_parts) or None
 
+        # Compress RAG context if needed
+        if combined_rag_context:
+            combined_rag_context, rag_compression_result = self.compression_service.compress_rag_context(
+                combined_rag_context
+            )
+            if rag_compression_result.was_compressed:
+                logger.info(
+                    "RAG context compressed: %d -> %d tokens",
+                    rag_compression_result.original_tokens,
+                    rag_compression_result.compressed_tokens,
+                )
+
         llm_reply = self.llm.chat_reply(
             context=";".join(context_parts),
             message=message,
             rag_context=combined_rag_context,
+            chat_history=chat_history,
         )
         reply_sources = [
             {
@@ -1185,8 +1216,19 @@ class ChatService:
                 "with_source_rag": bool(source_rag_context),
                 "with_courseware_rag": bool(courseware_hits),
                 "selected_chunk_ids": list(selected_chunk_ids or []),
+                "chat_compressed": chat_compression_result.was_compressed,
+                "chat_original_tokens": chat_compression_result.original_tokens,
+                "chat_compressed_tokens": chat_compression_result.compressed_tokens,
             },
         )
+        if chat_compression_result.was_compressed:
+            logger.info(
+                "Chat history compressed: %d -> %d tokens, saved %d tokens, messages: %s",
+                chat_compression_result.original_tokens,
+                chat_compression_result.compressed_tokens,
+                chat_compression_result.tokens_saved,
+                chat_compression_result.message_ids_affected,
+            )
         logger.info(
             "chat message processed session=%s with_source_rag=%s with_courseware_rag=%s",
             session_id,
@@ -1207,6 +1249,30 @@ class ChatService:
     def list_messages(self, session_id: str) -> List[ChatMessage]:
         session = self.get_session(session_id)
         return self.messages.list_by_session(session.id)
+
+    def delete_session(self, session_id: str, courseware_id: str | None = None) -> bool:
+        """
+        Delete a chat session.
+
+        Args:
+            session_id: Session ID to delete
+            courseware_id: Optional, verify session belongs to this courseware
+
+        Returns:
+            True if deleted successfully
+        """
+        session = self.sessions.get(session_id)
+        if not session:
+            raise NotFoundError("chat session not found")
+
+        if courseware_id and session.courseware_id != courseware_id:
+            raise ValidationError("session does not belong to this courseware", field="courseware_id")
+
+        deleted = self.sessions.delete(session_id)
+        if deleted:
+            self.event_store.add("chat_session_deleted", {"session_id": session_id})
+            logger.info("chat session deleted id=%s", session_id)
+        return deleted
 
 
 class RewriteService:

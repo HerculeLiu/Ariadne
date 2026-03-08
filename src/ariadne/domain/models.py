@@ -58,6 +58,8 @@ class Courseware:
     knowledge_doc_path: str = ""
     chunks: List[Chunk] = field(default_factory=list)
     source_asset_ids: List[str] = field(default_factory=list)  # IDs of assets used for generation
+    source_search_run_id: str = ""
+    source_search_result_ids: List[str] = field(default_factory=list)
     outline: List[Dict[str, object]] = field(default_factory=list)
     default_page_id: str = "pg_generated"
     knowledge_html_path: str = ""
@@ -77,6 +79,33 @@ class GenerationJob:
     completed_chunks: List[str] = field(default_factory=list)
     error: str = ""
     events: List[JobEvent] = field(default_factory=list)
+
+
+@dataclass
+class SearchResult:
+    id: str
+    search_run_id: str
+    title: str
+    url: str
+    domain: str
+    snippet: str = ""
+    content: str = ""
+    selected: bool = False
+    fragment_count: int = 0
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class SearchRun:
+    id: str
+    query: str
+    created_at: str
+    web_enabled: bool = True
+    status: str = "ready"
+    result_count: int = 0
+    selected_result_ids: List[str] = field(default_factory=list)
+    results: List[SearchResult] = field(default_factory=list)
 
 
 @dataclass
@@ -144,6 +173,9 @@ class ChatMessage:
     selected_chunk_ids: List[str] = field(default_factory=list)
     asset_ids: List[str] = field(default_factory=list)
     sources: List[Dict[str, object]] = field(default_factory=list)
+    is_compressed: bool = False
+    original_content: str = ""
+    compression_metadata: Dict[str, object] = field(default_factory=dict)
 
 
 @dataclass

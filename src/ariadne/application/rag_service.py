@@ -54,6 +54,7 @@ class RAGService:
         vector_store: VectorStore,
         embedding_client: "EmbeddingClient" = None,
         asset_repo=None,
+        search_repo=None,
         query_rewriter: QueryRewriteService | None = None,
     ) -> None:
         """
@@ -68,6 +69,7 @@ class RAGService:
         self.vector_store = vector_store
         self.embedding_client = embedding_client
         self.asset_repo = asset_repo
+        self.search_repo = search_repo
         self.query_rewriter = query_rewriter or QueryRewriteService()
         if not self.embedding_client:
             logger.warning("RAG initialized without embedding client; vector retrieval rewrites will be skipped")
@@ -219,6 +221,7 @@ class RAGService:
         query_embedding: List[float],
         top_k: int = 3,
         asset_ids: List[str] | None = None,
+        search_result_ids: List[str] | None = None,
         rewrite_context: dict | None = None,
     ) -> List[RetrievalResult]:
         """
@@ -241,21 +244,24 @@ class RAGService:
             original_embedding=query_embedding,
             top_k=max(top_k, 3),
             asset_ids=asset_ids,
+            search_result_ids=search_result_ids,
         )
         keyword_results = self._keyword_retrieve(
             rewrite_plan=rewrite_plan,
             top_k=max(top_k, 3),
             asset_ids=asset_ids,
+            search_result_ids=search_result_ids,
         )
         results = self._fuse_results(vector_results, keyword_results, top_k=top_k)
 
         logger.info(
-            "Retrieved %d fragments for query=%s rewrites=%s keywords=%s asset_ids=%s",
+            "Retrieved %d fragments for query=%s rewrites=%s keywords=%s asset_ids=%s search_result_ids=%s",
             len(results),
             query[:120],
             rewrite_plan.rewrite_queries,
             rewrite_plan.keywords,
             asset_ids,
+            search_result_ids,
         )
         return results
 
@@ -266,6 +272,7 @@ class RAGService:
         original_embedding: List[float],
         top_k: int,
         asset_ids: List[str] | None,
+        search_result_ids: List[str] | None,
     ) -> List[RetrievalResult]:
         if not original_embedding:
             return []
@@ -280,11 +287,12 @@ class RAGService:
                 logger.warning("Failed to embed rewrite queries: %s", exc)
 
         ranked: dict[str, tuple[float, RetrievalResult]] = {}
+        source_ids = [value for value in [*(asset_ids or []), *(search_result_ids or [])] if value]
         for query_index, (query_text, embedding) in enumerate(query_embeddings):
             fragments = self.vector_store.search(
                 query_embedding=embedding,
                 top_k=max(top_k * 2, 5),
-                asset_ids=asset_ids,
+                asset_ids=source_ids or None,
             )
             for rank, fragment in enumerate(fragments, start=1):
                 score = 1.0 / (60 + rank + query_index)
@@ -316,8 +324,9 @@ class RAGService:
         rewrite_plan: QueryRewriteResult,
         top_k: int,
         asset_ids: List[str] | None,
+        search_result_ids: List[str] | None,
     ) -> List[RetrievalResult]:
-        if not self.asset_repo:
+        if not self.asset_repo and not self.search_repo:
             return []
 
         search_terms = self._keyword_terms(rewrite_plan)
@@ -325,10 +334,11 @@ class RAGService:
             return []
 
         ranked: list[tuple[float, RetrievalResult]] = []
-        for payload in self.asset_repo.iter_fragments(asset_ids):
+
+        def absorb(payload: dict) -> None:
             score = self._score_fragment(payload, search_terms)
             if score <= 0:
-                continue
+                return
             heading_path = payload.get("heading_path") or []
             if isinstance(heading_path, str):
                 heading_path = [x.strip() for x in heading_path.split(" > ") if x.strip()]
@@ -337,20 +347,27 @@ class RAGService:
                     score,
                     RetrievalResult(
                         fragment_id=payload.get("fragment_id", ""),
-                        asset_id=payload.get("asset_id", ""),
+                        asset_id=payload.get("asset_id", "") or payload.get("result_id", ""),
                         text=payload.get("text", ""),
                         relevance_score=score,
                         order_no=int(payload.get("order_no", 0)),
                         source_start=int(payload.get("source_start", 0)),
                         source_end=int(payload.get("source_end", 0)),
                         block_type=payload.get("block_type", "paragraph"),
-                        section_title=payload.get("section_title", ""),
+                        section_title=payload.get("section_title", "") or payload.get("title", ""),
                         page_no=int(payload.get("page_no", 0)),
                         heading_path=list(heading_path),
                         retrieval_mode="keyword",
                     ),
                 )
             )
+
+        if self.asset_repo:
+            for payload in self.asset_repo.iter_fragments(asset_ids):
+                absorb(payload)
+        if self.search_repo:
+            for payload in self.search_repo.iter_fragments(search_result_ids):
+                absorb(payload)
         ranked.sort(key=lambda x: x[0], reverse=True)
         return [item[1] for item in ranked[: max(top_k * 2, 5)]]
 

@@ -260,6 +260,10 @@ class AriadneHandler(BaseHTTPRequestHandler):
         if path == "/api/v1/chat/messages":
             return self._send_json(self.api.send_chat_message(payload))
 
+        if path.startswith("/api/v1/chat/sessions/") and path.endswith("/delete"):
+            session_id = path.split("/")[4]
+            return self._send_json(self.api.delete_chat_session(session_id, payload))
+
         if path.startswith("/api/v1/pages/") and path.endswith("/rewrite-draft"):
             page_id = path.split("/")[4]
             return self._send_json(self.api.rewrite_draft(page_id, payload))

@@ -21,6 +21,8 @@ from ariadne.domain.models import (
     LearnerProfile,
     Page,
     RewriteDraft,
+    SearchResult,
+    SearchRun,
     utc_now_iso,
 )
 
@@ -213,6 +215,8 @@ class FileCoursewareRepo:
             "status": courseware.status,
             "current_version": courseware.current_version,
             "source_asset_ids": list(courseware.source_asset_ids),
+            "source_search_run_id": courseware.source_search_run_id,
+            "source_search_result_ids": list(courseware.source_search_result_ids),
             "default_page_id": courseware.default_page_id,
             "knowledge_doc_path": courseware.knowledge_doc_path,
             "knowledge_html_path": courseware.knowledge_html_path,
@@ -333,9 +337,11 @@ class FileCoursewareRepo:
             knowledge_doc_path=meta.get("knowledge_doc_path", str(self._markdown_path(courseware_id))),
             chunks=[],
             source_asset_ids=list(meta.get("source_asset_ids", [])),
+            source_search_run_id=meta.get("source_search_run_id", ""),
+            source_search_result_ids=list(meta.get("source_search_result_ids", [])),
             outline=_read_json(self._outline_path(courseware_id), []),
             default_page_id=meta.get("default_page_id", "pg_generated"),
-            knowledge_html_path=meta.get("knowledge_html_path", str(self._html_path(courseware_id))),
+            knowledge_html_path=meta.get("knowledge_html_path") or "",
         )
         for path in sorted(self._chunks_dir(courseware_id).glob("*.json")):
             payload = _read_json(path, None)
@@ -594,6 +600,132 @@ class FileAssetRepo:
         return [asset for asset in (self.get(row.get("id", "")) for row in _read_json(self.index_path, [])) if asset]
 
 
+class FileSearchRunRepo:
+    def __init__(
+        self,
+        base_dir: str = "storage/search_runs",
+        index_path: str = "storage/indexes/search_runs.json",
+    ) -> None:
+        self.base_dir = Path(base_dir)
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.index_path = Path(index_path)
+        _ensure_index(self.index_path)
+        self._items: Dict[str, SearchRun] = {}
+
+    def _run_dir(self, search_run_id: str) -> Path:
+        return self.base_dir / search_run_id
+
+    def _meta_path(self, search_run_id: str) -> Path:
+        return self._run_dir(search_run_id) / "meta.json"
+
+    def _results_path(self, search_run_id: str) -> Path:
+        return self._run_dir(search_run_id) / "results.json"
+
+    def _fragments_path(self, search_run_id: str) -> Path:
+        return self._run_dir(search_run_id) / "fragments.json"
+
+    def save(self, run: SearchRun) -> None:
+        run_dir = self._run_dir(run.id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        now = utc_now_iso()
+        if not run.created_at:
+            run.created_at = now
+        payload = {
+            "id": run.id,
+            "query": run.query,
+            "created_at": run.created_at,
+            "web_enabled": run.web_enabled,
+            "status": run.status,
+            "result_count": len(run.results),
+            "selected_result_ids": list(run.selected_result_ids),
+        }
+        _atomic_write_json(self._meta_path(run.id), payload)
+        _atomic_write_json(self._results_path(run.id), [asdict(result) for result in run.results])
+
+        rows = [row for row in _read_json(self.index_path, []) if row.get("id") != run.id]
+        rows.append(
+            {
+                "id": run.id,
+                "query": run.query,
+                "created_at": run.created_at,
+                "status": run.status,
+                "result_count": len(run.results),
+                "path": str(self._meta_path(run.id)),
+            }
+        )
+        rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        _atomic_write_json(self.index_path, rows)
+        self._items[run.id] = run
+
+    def get(self, search_run_id: str) -> SearchRun | None:
+        cached = self._items.get(search_run_id)
+        if cached:
+            return cached
+        meta = _read_json(self._meta_path(search_run_id), None)
+        if not meta:
+            return None
+        results = [
+            SearchResult(**row)
+            for row in _read_json(self._results_path(search_run_id), [])
+            if isinstance(row, dict)
+        ]
+        run = SearchRun(
+            id=meta["id"],
+            query=meta.get("query", ""),
+            created_at=meta.get("created_at", ""),
+            web_enabled=bool(meta.get("web_enabled", True)),
+            status=meta.get("status", "ready"),
+            result_count=int(meta.get("result_count", len(results))),
+            selected_result_ids=list(meta.get("selected_result_ids", [])),
+            results=results,
+        )
+        self._items[run.id] = run
+        return run
+
+    def update_result(self, search_run_id: str, result: SearchResult) -> SearchRun | None:
+        run = self.get(search_run_id)
+        if not run:
+            return None
+        updated: List[SearchResult] = []
+        replaced = False
+        for current in run.results:
+            if current.id == result.id:
+                updated.append(result)
+                replaced = True
+            else:
+                updated.append(current)
+        if not replaced:
+            updated.append(result)
+        run.results = updated
+        run.result_count = len(updated)
+        self.save(run)
+        return run
+
+    def save_fragments(self, search_run_id: str, result_id: str, fragments: List[dict]) -> None:
+        rows = [row for row in _read_json(self._fragments_path(search_run_id), []) if isinstance(row, dict)]
+        rows = [row for row in rows if row.get("result_id") != result_id]
+        rows.extend(fragments)
+        _atomic_write_json(self._fragments_path(search_run_id), rows)
+
+    def get_fragments(self, search_run_id: str, result_ids: List[str] | None = None) -> List[dict]:
+        rows = [row for row in _read_json(self._fragments_path(search_run_id), []) if isinstance(row, dict)]
+        if not result_ids:
+            return rows
+        selected = set(result_ids)
+        return [row for row in rows if row.get("result_id") in selected]
+
+    def iter_fragments(self, search_result_ids: List[str] | None = None) -> Iterable[dict]:
+        target_ids = set(search_result_ids or [])
+        for row in _read_json(self.index_path, []):
+            run_id = row.get("id", "")
+            if not run_id:
+                continue
+            for fragment in self.get_fragments(run_id):
+                if target_ids and fragment.get("result_id") not in target_ids:
+                    continue
+                yield fragment
+
+
 class InMemoryExportRepo:
     def __init__(self) -> None:
         self._items: Dict[str, ExportTask] = {}
@@ -622,6 +754,12 @@ class InMemoryChatSessionRepo:
         if page_id:
             items = [it for it in items if it.page_id == page_id]
         return sorted(items, key=lambda x: x.last_active_at, reverse=True)
+
+    def delete(self, session_id: str) -> bool:
+        if session_id in self._items:
+            del self._items[session_id]
+            return True
+        return False
 
 
 class FileChatSessionRepo:
@@ -734,9 +872,29 @@ class FileChatSessionRepo:
                     selected_chunk_ids=list(row.get("selected_chunk_ids", [])),
                     asset_ids=list(row.get("asset_ids", [])),
                     sources=list(row.get("sources", [])),
+                    is_compressed=row.get("is_compressed", False),
+                    original_content=row.get("original_content", ""),
+                    compression_metadata=dict(row.get("compression_metadata", {})),
                 )
             )
         return sorted(messages, key=lambda x: x.created_at)
+
+    def delete(self, session_id: str) -> bool:
+        row = next((row for row in _read_json(self.index_path, []) if row.get("id") == session_id), None)
+        if not row:
+            return False
+
+        session_path = Path(row.get("path", ""))
+        if session_path.exists():
+            session_path.unlink(missing_ok=True)
+
+        rows = [r for r in _read_json(self.index_path, []) if r.get("id") != session_id]
+        _atomic_write_json(self.index_path, rows)
+
+        if session_id in self._items:
+            del self._items[session_id]
+
+        return True
 
 
 class InMemoryChatMessageRepo:

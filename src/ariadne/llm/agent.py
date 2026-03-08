@@ -186,7 +186,22 @@ class LLMAgent:
             {"role": "user", "content": user_prompt},
         ])
 
-    def chat_reply(self, context: str, message: str, rag_context: str | None = None) -> str:
+    def chat_reply(
+        self,
+        context: str,
+        message: str,
+        rag_context: str | None = None,
+        chat_history: List[Dict[str, str]] | None = None,
+    ) -> str:
+        """
+        Generate chat reply with optional history and RAG context.
+
+        Args:
+            context: Session context string
+            message: Current user message
+            rag_context: Optional RAG retrieval results
+            chat_history: Optional conversation history [{"role": "user/assistant", "content": "..."}]
+        """
         system_prompt = self.prompts.get("chat_general.md")
         if not system_prompt.strip():
             system_prompt = (
@@ -195,16 +210,22 @@ class LLMAgent:
                 "If the user asks for unsafe content, refuse briefly and suggest a safe alternative."
             )
 
+        # Build messages list
+        messages = [{"role": "system", "content": system_prompt}]
+
+        # Add chat history if provided
+        if chat_history:
+            messages.extend(chat_history)
+
         # Build user prompt with optional RAG context
         user_prompt_parts = [f"context={context}", f"message={message}"]
         if rag_context:
             user_prompt_parts.insert(1, f"reference_materials={rag_context}")
 
         user_prompt = "\n".join(user_prompt_parts)
-        return self._chat([
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ])
+        messages.append({"role": "user", "content": user_prompt})
+
+        return self._chat(messages)
 
     def rewrite_chunk(self, original: str, instruction: str) -> str:
         system_prompt = self.prompts.get("rewrite_chunk.md")
