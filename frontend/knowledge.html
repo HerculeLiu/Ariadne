@@ -297,6 +297,10 @@
       box-shadow: 0 4px 14px rgba(48, 42, 30, 0.05);
     }
 
+    .msg:not(.user) {
+      white-space: normal;
+    }
+
     .msg.user {
       align-self: flex-end;
       background: rgba(231, 243, 240, 0.92);
@@ -312,6 +316,119 @@
       font-size: 12px;
       text-align: center;
       max-width: 95%;
+    }
+
+    .msg-markdown {
+      color: inherit;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .msg-markdown > *:first-child { margin-top: 0; }
+    .msg-markdown > *:last-child { margin-bottom: 0; }
+
+    .msg-markdown p {
+      margin: 0 0 10px;
+      color: #31424a;
+    }
+
+    .msg-markdown ul,
+    .msg-markdown ol {
+      margin: 0 0 10px 18px;
+      padding-left: 6px;
+    }
+
+    .msg-markdown li {
+      margin: 4px 0;
+      color: #31424a;
+    }
+
+    .msg-markdown strong {
+      color: #27404a;
+      font-weight: 700;
+    }
+
+    .msg-markdown em {
+      color: #466772;
+    }
+
+    .msg-markdown code {
+      background: rgba(222, 238, 242, 0.92);
+      border: 1px solid rgba(143, 190, 202, 0.28);
+      border-radius: 6px;
+      padding: 1px 5px;
+      color: #34515c;
+      font-size: 12px;
+    }
+
+    .msg-markdown pre {
+      margin: 10px 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(136, 166, 172, 0.22);
+      background: rgba(235, 243, 245, 0.96);
+      white-space: pre-wrap;
+      overflow-x: auto;
+      color: #31424a;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+    }
+
+    .msg-markdown pre code {
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-size: 12px;
+    }
+
+    .msg-markdown blockquote {
+      margin: 10px 0;
+      padding: 8px 12px;
+      border-left: 3px solid rgba(109, 159, 150, 0.48);
+      background: rgba(237, 245, 244, 0.88);
+      color: #4a646d;
+      border-radius: 0 10px 10px 0;
+    }
+
+    .msg-markdown table {
+      width: 100%;
+      margin: 10px 0;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid rgba(136, 166, 172, 0.2);
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: 12px;
+      display: block;
+      overflow-x: auto;
+    }
+
+    .msg-markdown th,
+    .msg-markdown td {
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      border-right: 1px solid rgba(136, 166, 172, 0.16);
+      border-bottom: 1px solid rgba(136, 166, 172, 0.16);
+      min-width: 88px;
+      color: #31424a;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .msg-markdown th:last-child,
+    .msg-markdown td:last-child { border-right: none; }
+    .msg-markdown tr:last-child td { border-bottom: none; }
+
+    .msg-markdown th {
+      background: rgba(232, 243, 246, 0.94);
+      color: #29424b;
+      font-weight: 700;
+    }
+
+    .msg-markdown a {
+      color: #4e87a1;
+      text-decoration: underline;
+      text-decoration-color: rgba(78, 135, 161, 0.35);
+      text-underline-offset: 2px;
     }
 
     .chat-input {
@@ -479,10 +596,115 @@
       return (date.getMonth() + 1) + '/' + date.getDate();
     }
 
+    function escapeHtml(text) {
+      return String(text || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
+    function escapeAttr(text) {
+      return escapeHtml(text).replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+    }
+
+    function sanitizeUrl(url) {
+      const value = String(url || '').trim();
+      if (!value) return '#';
+      return /^https?:\/\//i.test(value) ? value : '#';
+    }
+
+    function normalizeMarkdownText(text) {
+      return String(text || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\t/g, '    ');
+    }
+
+    function renderInlineMarkdown(text) {
+      let html = escapeHtml(normalizeMarkdownText(text));
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${escapeAttr(sanitizeUrl(href))}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+      html = html.replace(/\n/g, '<br>');
+      return html;
+    }
+
+    function renderMarkdownParagraph(text) {
+      return `<p>${renderInlineMarkdown(text)}</p>`;
+    }
+
+    function renderMarkdownList(lines, ordered = false) {
+      const tag = ordered ? 'ol' : 'ul';
+      const items = lines.map((line) => {
+        const value = ordered ? line.replace(/^\d+\.\s+/, '') : line.replace(/^[-*+]\s+/, '');
+        return `<li>${renderInlineMarkdown(value)}</li>`;
+      }).join('');
+      return `<${tag}>${items}</${tag}>`;
+    }
+
+    function renderMarkdownBlockquote(lines) {
+      const body = lines
+        .map((line) => line.replace(/^>\s?/, '').trim())
+        .filter(Boolean)
+        .map((line) => `<p>${renderInlineMarkdown(line)}</p>`)
+        .join('');
+      return `<blockquote>${body || '<p></p>'}</blockquote>`;
+    }
+
+    function isMarkdownTable(lines) {
+      if (!Array.isArray(lines) || lines.length < 2) return false;
+      if (!lines.every((line) => /^\|.*\|$/.test(line.trim()))) return false;
+      return /^\|\s*[:\-| ]+\|$/.test(lines[1].trim());
+    }
+
+    function renderMarkdownTable(lines) {
+      const parseCells = (line) => line.trim().slice(1, -1).split('|').map((cell) => cell.trim());
+      const header = parseCells(lines[0]);
+      const rows = lines.slice(2).map(parseCells);
+      const headHtml = `<thead><tr>${header.map((cell) => `<th>${renderInlineMarkdown(cell)}</th>`).join('')}</tr></thead>`;
+      const bodyHtml = rows.length
+        ? `<tbody>${rows.map((cells) => `<tr>${cells.map((cell) => `<td>${renderInlineMarkdown(cell)}</td>`).join('')}</tr>`).join('')}</tbody>`
+        : '';
+      return `<table>${headHtml}${bodyHtml}</table>`;
+    }
+
+    function renderChatMarkdown(text) {
+      const raw = normalizeMarkdownText(text);
+      if (!raw.trim()) return '';
+      const fences = [];
+      const placeholderPrefix = '__CODE_BLOCK_';
+      const fenced = raw.replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const token = `${placeholderPrefix}${fences.length}__`;
+        const language = String(lang || '').trim();
+        const label = language ? ` data-lang="${escapeAttr(language)}"` : '';
+        fences.push(`<pre><code${label}>${escapeHtml(code.replace(/\n+$/, '')).replace(/\n/g, '<br>')}</code></pre>`);
+        return token;
+      });
+      const blocks = fenced.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+      const html = blocks.map((block) => {
+        const lines = block.split('\n').map((line) => line.trimEnd()).filter((line) => line.trim().length > 0);
+        if (!lines.length) return '';
+        if (lines.length === 1 && lines[0].startsWith(placeholderPrefix)) return lines[0];
+        if (isMarkdownTable(lines)) return renderMarkdownTable(lines);
+        if (lines.every((line) => /^>\s?/.test(line))) return renderMarkdownBlockquote(lines);
+        if (lines.every((line) => /^[-*+]\s+/.test(line))) return renderMarkdownList(lines, false);
+        if (lines.every((line) => /^\d+\.\s+/.test(line))) return renderMarkdownList(lines, true);
+        return renderMarkdownParagraph(lines.join('\n'));
+      }).join('');
+      return fences.reduce((acc, fence, idx) => acc.replace(`${placeholderPrefix}${idx}__`, fence), html);
+    }
+
     function appendChat(role, text) {
       const row = document.createElement('div');
       row.className = role === 'user' ? 'msg user' : 'msg';
-      row.textContent = text;
+      if (role === 'assistant') {
+        row.innerHTML = `<div class="msg-markdown">${renderChatMarkdown(text)}</div>`;
+      } else {
+        row.textContent = text;
+      }
       const list = $('chatList');
       list.appendChild(row);
       list.scrollTop = list.scrollHeight;

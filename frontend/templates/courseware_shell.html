@@ -435,7 +435,9 @@
       max-height: 200px;
     }}
     .history-item {{
+      position: relative;
       padding: 8px 10px;
+      padding-right: 36px;
       border-radius: 8px;
       cursor: pointer;
       display: flex;
@@ -448,6 +450,38 @@
     .history-item:hover {{
       background: rgba(47, 93, 76, 0.05);
       border-color: rgba(47, 93, 76, 0.12);
+    }}
+    .history-item-delete {{
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 22px;
+      height: 22px;
+      border: none;
+      background: transparent;
+      color: #a35142;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+    }}
+    .history-item:hover .history-item-delete {{
+      opacity: 0.4;
+    }}
+    .history-item-delete:hover {{
+      opacity: 1 !important;
+      background: rgba(163, 81, 66, 0.12);
+    }}
+    .history-item.active .history-item-delete {{
+      color: rgba(255, 255, 255, 0.85);
+    }}
+    .history-item.active .history-item-delete:hover {{
+      background: rgba(255, 255, 255, 0.2);
     }}
     .history-item.active {{
       background: var(--accent);
@@ -482,7 +516,109 @@
       box-shadow: 0 4px 14px rgba(48,42,30,.04);
     }}
     .msg.user {{ width: 100%; background: transparent; align-self: flex-end; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; border: none; padding: 0; box-shadow: none; }}
-    .msg.assistant {{ align-self: flex-start; color: #2e3941; }}
+    .msg.assistant {{ align-self: flex-start; color: #2e3941; white-space: normal; }}
+    .msg-markdown {{
+      color: inherit;
+      font-size: 13px;
+      line-height: 1.65;
+    }}
+    .msg-markdown > *:first-child {{ margin-top: 0; }}
+    .msg-markdown > *:last-child {{ margin-bottom: 0; }}
+    .msg-markdown p {{
+      margin: 0 0 10px;
+      color: #31424a;
+    }}
+    .msg-markdown ul,
+    .msg-markdown ol {{
+      margin: 0 0 10px 18px;
+      padding-left: 6px;
+    }}
+    .msg-markdown li {{
+      margin: 4px 0;
+      color: #31424a;
+    }}
+    .msg-markdown strong {{
+      color: #27404a;
+      font-weight: 700;
+    }}
+    .msg-markdown em {{
+      color: #466772;
+    }}
+    .msg-markdown code {{
+      background: rgba(222, 238, 242, 0.92);
+      border: 1px solid rgba(143, 190, 202, 0.28);
+      border-radius: 6px;
+      padding: 1px 5px;
+      color: #34515c;
+      font-size: 12px;
+    }}
+    .msg-markdown pre {{
+      margin: 10px 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(136, 166, 172, 0.22);
+      background: rgba(235, 243, 245, 0.96);
+      white-space: pre-wrap;
+      overflow-x: auto;
+      color: #31424a;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68);
+    }}
+    .msg-markdown pre code {{
+      background: transparent;
+      border: none;
+      padding: 0;
+      font-size: 12px;
+    }}
+    .msg-markdown blockquote {{
+      margin: 10px 0;
+      padding: 8px 12px;
+      border-left: 3px solid rgba(109, 159, 150, 0.48);
+      background: rgba(237, 245, 244, 0.88);
+      color: #4a646d;
+      border-radius: 0 10px 10px 0;
+    }}
+    .msg-markdown table {{
+      width: 100%;
+      margin: 10px 0;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid rgba(136, 166, 172, 0.2);
+      border-radius: 10px;
+      overflow: hidden;
+      font-size: 12px;
+      display: block;
+      overflow-x: auto;
+    }}
+    .msg-markdown th,
+    .msg-markdown td {{
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+      border-right: 1px solid rgba(136, 166, 172, 0.16);
+      border-bottom: 1px solid rgba(136, 166, 172, 0.16);
+      min-width: 88px;
+      color: #31424a;
+      background: rgba(255, 255, 255, 0.72);
+    }}
+    .msg-markdown th:last-child,
+    .msg-markdown td:last-child {{ border-right: none; }}
+    .msg-markdown tr:last-child td {{ border-bottom: none; }}
+    .msg-markdown th {{
+      background: rgba(232, 243, 246, 0.94);
+      color: #29424b;
+      font-weight: 700;
+    }}
+    .msg-markdown a {{
+      color: #4e87a1;
+      text-decoration: underline;
+      text-decoration-color: rgba(78, 135, 161, 0.35);
+      text-underline-offset: 2px;
+    }}
+    .msg-markdown hr {{
+      border: none;
+      border-top: 1px solid rgba(136, 166, 172, 0.2);
+      margin: 12px 0;
+    }}
     .msg.assistant.pending {{
       background: rgba(255,255,255,.9);
       border-color: rgba(221,210,191,.82);
@@ -1150,7 +1286,11 @@
       }} else {{
         const row = document.createElement('div');
         row.className = `msg ${{role}}`;
-        row.textContent = text;
+        if (role === 'assistant') {{
+          row.innerHTML = `<div class='msg-markdown'>${{renderChatMarkdown(text)}}</div>`;
+        }} else {{
+          row.textContent = text;
+        }}
         list.appendChild(row);
       }}
       list.scrollTop = list.scrollHeight;
@@ -1181,7 +1321,7 @@
         return;
       }}
       row.className = `msg assistant${{isError ? ' error' : ''}}`;
-      row.textContent = text || '';
+      row.innerHTML = `<div class='msg-markdown'>${{renderChatMarkdown(text || '')}}</div>`;
       const list = $('chatList');
       if (list) list.scrollTop = list.scrollHeight;
     }}
@@ -1439,12 +1579,19 @@
         <div class="history-item ${{s.id === chatState.sessionId ? 'active' : ''}}" data-id="${{s.id}}">
           <div class="history-item-title">${{esc(s.title || '新对话')}}</div>
           <div class="history-item-time">${{formatTime(s.last_active_at || s.created_at)}}</div>
+          <button class="history-item-delete" type="button" data-id="${{s.id}}" title="删除此对话">×</button>
         </div>
       `).join('');
       list.querySelectorAll('.history-item').forEach(item => {{
         item.addEventListener('click', () => {{
           const sessionId = item.dataset.id;
           switchSession(sessionId);
+        }});
+      }});
+      list.querySelectorAll('.history-item-delete').forEach(btn => {{
+        btn.addEventListener('click', (e) => {{
+          e.stopPropagation();
+          deleteHistorySession(btn.dataset.id);
         }});
       }});
     }}
@@ -1500,6 +1647,38 @@
         if (!suppressError) {{
           appendChat('assistant', 'Failed to load chat history');
         }}
+      }}
+    }}
+    async function deleteHistorySession(sessionId) {{
+      if (!sessionId) return;
+      const isCurrent = sessionId === chatState.sessionId;
+      const confirmMsg = isCurrent ? '确定要删除当前对话吗？' : '确定要删除此对话记录吗？';
+      if (!window.confirm(confirmMsg)) return;
+      try {{
+        const result = await apiJson(`/api/v1/chat/sessions/${{encodeURIComponent(sessionId)}}/delete`, {{
+          method: 'POST',
+          body: JSON.stringify({{
+            courseware_id: chatCoursewareId || '',
+          }}),
+        }});
+        if (result.code !== 0) {{
+          throw new Error(result.error?.message || '删除失败');
+        }}
+        chatState.sessions = chatState.sessions.filter(s => s.id !== sessionId);
+        if (isCurrent) {{
+          chatState.sessionId = '';
+          $('chatMessages').innerHTML = '<div class="msg assistant">Hi, I am ready. Ask me anything.</div>';
+          if (chatState.sessions.length > 0) {{
+            await switchSession(chatState.sessions[0].id, true);
+          }} else {{
+            renderHistoryList();
+          }}
+        }} else {{
+          renderHistoryList();
+        }}
+        showToast('对话已删除', 'success');
+      }} catch (err) {{
+        showToast(err?.message || '删除失败，请稍后重试', 'error');
       }}
     }}
     async function restoreLatestChatSession() {{
@@ -1733,6 +1912,11 @@
     function escAttr(s) {{
       return esc(s).replaceAll('"','&quot;').replaceAll("'", '&#39;');
     }}
+    function sanitizeUrl(url) {{
+      const value = String(url || '').trim();
+      if (!value) return '#';
+      return /^https?:\/\//i.test(value) ? value : '#';
+    }}
     function triggerChunkHighlight(el) {{
       if (!el) return;
       if (el.__chunkHighlightTimeout) {{
@@ -1761,9 +1945,68 @@
       s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
       s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
       s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
-      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${{escAttr(sanitizeUrl(href))}}" target="_blank" rel="noopener noreferrer">${{label}}</a>`);
       s = s.replace(/\n/g, '<br>');
       return s;
+    }}
+    function renderMarkdownParagraph(text) {{
+      return `<p>${{inlineMd(text)}}</p>`;
+    }}
+    function renderMarkdownBlockquote(lines) {{
+      const body = lines
+        .map((line) => line.replace(/^>\s?/, '').trim())
+        .filter(Boolean)
+        .map((line) => `<p>${{inlineMd(line)}}</p>`)
+        .join('');
+      return `<blockquote>${{body || '<p></p>'}}</blockquote>`;
+    }}
+    function renderMarkdownList(lines, ordered = false) {{
+      const tag = ordered ? 'ol' : 'ul';
+      const items = lines.map((line) => {{
+        const value = ordered ? line.replace(/^\d+\.\s+/, '') : line.replace(/^[-*+]\s+/, '');
+        return `<li>${{inlineMd(value)}}</li>`;
+      }}).join('');
+      return `<${{tag}}>${{items}}</${{tag}}>`;
+    }}
+    function isMarkdownTable(lines) {{
+      if (!Array.isArray(lines) || lines.length < 2) return false;
+      if (!lines.every((line) => /^\|.*\|$/.test(line.trim()))) return false;
+      return /^\|\s*[:\-| ]+\|$/.test(lines[1].trim());
+    }}
+    function renderMarkdownTable(lines) {{
+      const parseCells = (line) => line.trim().slice(1, -1).split('|').map((cell) => cell.trim());
+      const header = parseCells(lines[0]);
+      const rows = lines.slice(2).map(parseCells);
+      const headHtml = `<thead><tr>${{header.map((cell) => `<th>${{inlineMd(cell)}}</th>`).join('')}}</tr></thead>`;
+      const bodyHtml = rows.length
+        ? `<tbody>${{rows.map((cells) => `<tr>${{cells.map((cell) => `<td>${{inlineMd(cell)}}</td>`).join('')}}</tr>`).join('')}}</tbody>`
+        : '';
+      return `<table>${{headHtml}}${{bodyHtml}}</table>`;
+    }}
+    function renderChatMarkdown(text) {{
+      const raw = normalizeEscapes(text);
+      if (!raw.trim()) return '';
+      const fences = [];
+      const placeholderPrefix = '__CODE_BLOCK_';
+      const fenced = raw.replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (_, lang, code) => {{
+        const token = `${{placeholderPrefix}}${{fences.length}}__`;
+        const language = String(lang || '').trim();
+        const label = language ? ` data-lang="${{escAttr(language)}}"` : '';
+        fences.push(`<pre><code${{label}}>${{esc(code.replace(/\n+$/,'')).replace(/\n/g, '<br>')}}</code></pre>`);
+        return token;
+      }});
+      const blocks = fenced.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+      const html = blocks.map((block) => {{
+        const lines = block.split('\n').map((line) => line.trimEnd()).filter((line) => line.trim().length > 0);
+        if (!lines.length) return '';
+        if (lines.length === 1 && lines[0].startsWith(placeholderPrefix)) return lines[0];
+        if (isMarkdownTable(lines)) return renderMarkdownTable(lines);
+        if (lines.every((line) => /^>\s?/.test(line))) return renderMarkdownBlockquote(lines);
+        if (lines.every((line) => /^[-*+]\s+/.test(line))) return renderMarkdownList(lines, false);
+        if (lines.every((line) => /^\d+\.\s+/.test(line))) return renderMarkdownList(lines, true);
+        return renderMarkdownParagraph(lines.join('\n'));
+      }}).join('');
+      return fences.reduce((acc, fence, idx) => acc.replace(`${{placeholderPrefix}}${{idx}}__`, fence), html);
     }}
     function setProgress(percent) {{
       const bar = $('bar');
