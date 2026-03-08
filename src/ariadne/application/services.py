@@ -13,6 +13,7 @@ from ariadne.application.config import load_config
 from ariadne.application.file_parser import FileParserService, _flush_logs
 from ariadne.application.knowledge import KnowledgeDocStore, chunks_to_markdown, markdown_to_chunks, markdown_to_html
 from ariadne.application.query_rewrite import QueryRewriteService
+from ariadne.application.search_service import SearchService
 from ariadne.domain.errors import (
     FileSizeLimitError,
     NotFoundError,
@@ -46,6 +47,7 @@ from ariadne.infrastructure.repositories import (
     FileCoursewareRepo,
     FileDraftRepo,
     FileJobRepo,
+    FileSearchRunRepo,
     InMemoryAnswerRepo,
     InMemoryExportRepo,
     InMemoryProfileRepo,
@@ -152,22 +154,26 @@ class GenerationService:
         coursewares,
         jobs,
         assets,
+        search_runs,
         llm: LLMAgent,
         event_store: EventMetricStore,
         knowledge_store: KnowledgeDocStore,
         config=None,
         embedding_client: EmbeddingClient = None,
         rag_service: RAGService = None,
+        search_service: SearchService | None = None,
     ) -> None:
         self.coursewares = coursewares
         self.jobs = jobs
         self.assets = assets
+        self.search_runs = search_runs
         self.llm = llm
         self.event_store = event_store
         self.knowledge_store = knowledge_store
         self.config = config or load_config()
         self.embedding_client = embedding_client or EmbeddingClient(self.config)
         self.rag_service = rag_service
+        self.search_service = search_service
         self._job_lock = threading.Lock()
 
     def generate(
@@ -175,8 +181,10 @@ class GenerationService:
         topic: str,
         keywords: List[str],
         asset_ids: List[str] = None,
+        search_run_id: str = "",
+        selected_search_result_ids: List[str] | None = None,
     ) -> Tuple[GenerationJob, Courseware]:
-        logger.info("generate start topic=%s asset_ids=%s", topic, asset_ids)
+        logger.info("generate start topic=%s asset_ids=%s search_run_id=%s selected_search_result_ids=%s", topic, asset_ids, search_run_id, selected_search_result_ids)
         self._validate(topic, keywords)
 
         courseware_id = f"cw_{uuid4().hex[:8]}"
@@ -195,6 +203,8 @@ class GenerationService:
             knowledge_markdown="",
             knowledge_doc_path="",
             source_asset_ids=asset_ids or [],
+            source_search_run_id=search_run_id,
+            source_search_result_ids=list(selected_search_result_ids or []),
             default_page_id=unique_page_id,
         )
         courseware.outline = []
@@ -209,7 +219,7 @@ class GenerationService:
         self.jobs.save(job)
         threading.Thread(
             target=self._run_generation_job,
-            args=(courseware_id, topic, keywords, asset_ids or []),
+            args=(courseware_id, topic, keywords, asset_ids or [], search_run_id, list(selected_search_result_ids or [])),
             daemon=True,
         ).start()
         self.event_store.add("generate", {"courseware_id": courseware_id, "topic": topic})
@@ -268,6 +278,8 @@ class GenerationService:
         topic: str,
         keywords: List[str],
         asset_ids: List[str],
+        search_run_id: str,
+        selected_search_result_ids: List[str],
     ) -> None:
         courseware = self.coursewares.get(courseware_id)
         if not courseware:
@@ -275,6 +287,21 @@ class GenerationService:
         try:
             self._update_job(courseware_id, phase=JobPhase.RETRIEVING, progress=5, message="materials collected")
             material_lines = self._collect_material_lines(asset_ids)  # Only show assets used for this generation
+            effective_search_result_ids = list(selected_search_result_ids or [])
+            if search_run_id and effective_search_result_ids and self.search_service:
+                try:
+                    prepared = self.search_service.prepare_selected_results(search_run_id, effective_search_result_ids)
+                    effective_search_result_ids = [row.id for row in prepared]
+                    self._update_job(
+                        courseware_id,
+                        progress=10,
+                        message=f"prepared {len(effective_search_result_ids)} search materials",
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("prepare search materials failed: %s", exc)
+                    self._update_job(courseware_id, message=f"search material prepare failed: {exc}")
+                    effective_search_result_ids = []
+            courseware.source_search_result_ids = effective_search_result_ids
 
             self._update_job(courseware_id, phase=JobPhase.OUTLINE, progress=15, message="generating outline")
 
@@ -288,6 +315,7 @@ class GenerationService:
                         query_embedding=query_embedding,
                         top_k=5,
                         asset_ids=asset_ids,
+                        search_result_ids=effective_search_result_ids,
                         rewrite_context={"topic": topic},
                     )
                     if results:
@@ -354,6 +382,7 @@ class GenerationService:
                             query_embedding=query_embedding,
                             top_k=3,
                             asset_ids=asset_ids,
+                            search_result_ids=effective_search_result_ids,
                             rewrite_context={
                                 "topic": topic,
                                 "chapter_title": task["chapter_title"],
@@ -832,14 +861,15 @@ class QAService:
 
         # Add RAG context if courseware has source assets
         rag_context = ""
-        if courseware.source_asset_ids and self.rag_service and self.embedding_client:
+        if (courseware.source_asset_ids or courseware.source_search_result_ids) and self.rag_service:
             try:
-                query_embedding = self.embedding_client.encode_single(question)
+                query_embedding = self.embedding_client.encode_single(question) if self.embedding_client else []
                 results = self.rag_service.retrieve(
                     query=question,
                     query_embedding=query_embedding,
                     top_k=3,
                     asset_ids=courseware.source_asset_ids,
+                    search_result_ids=courseware.source_search_result_ids,
                     rewrite_context={"topic": courseware.topic, "chunk_title": chunk.title},
                 )
                 if results:
@@ -1053,6 +1083,7 @@ class ChatService:
             if courseware and courseware.source_asset_ids:
                 effective_asset_ids = courseware.source_asset_ids
                 logger.debug("Using courseware source_asset_ids: %s", effective_asset_ids)
+        effective_search_result_ids = list(courseware.source_search_result_ids) if courseware else []
 
         user_msg = ChatMessage(
             id=f"msg_{uuid4().hex[:8]}",
@@ -1069,7 +1100,7 @@ class ChatService:
             session.title = message[:24]
 
         source_rag_context = ""
-        if effective_asset_ids and self.rag_service:
+        if (effective_asset_ids or effective_search_result_ids) and self.rag_service:
             try:
                 query_embedding = self.embedding_client.encode_single(message) if self.embedding_client else []
                 results = self.rag_service.retrieve(
@@ -1077,6 +1108,7 @@ class ChatService:
                     query_embedding=query_embedding,
                     top_k=5,
                     asset_ids=effective_asset_ids,
+                    search_result_ids=effective_search_result_ids,
                     rewrite_context={
                         "topic": courseware.topic if courseware else "",
                         "selected_context": selected_context or "",
@@ -1526,6 +1558,61 @@ class MonitoringService:
         }
 
 
+class HistoryService:
+    def __init__(self, courseware_service: CoursewareService, chat_service: ChatService) -> None:
+        self.courseware_service = courseware_service
+        self.chat_service = chat_service
+
+    def list_coursewares(self, limit: int = 80) -> List[dict]:
+        sessions = self.chat_service.list_sessions(courseware_id=None, page_id=None)
+        latest_session_by_courseware: Dict[str, ChatSession] = {}
+        for session in sessions:
+            existing = latest_session_by_courseware.get(session.courseware_id)
+            if not existing or session.last_active_at > existing.last_active_at:
+                latest_session_by_courseware[session.courseware_id] = session
+
+        rows: List[dict] = []
+        for cw in self.courseware_service.repo.list_all():
+            if not cw:
+                continue
+            if cw.status not in {"ready", "done"} and not cw.chunks and not cw.knowledge_markdown:
+                continue
+            latest_session = latest_session_by_courseware.get(cw.id)
+            last_chat_preview = ""
+            message_count = 0
+            if latest_session:
+                messages = self.chat_service.list_messages(latest_session.id)
+                message_count = len(messages)
+                for msg in reversed(messages):
+                    if msg.role == "user" and msg.content.strip():
+                        last_chat_preview = msg.content.strip()
+                        break
+            updated_candidates = [cw.created_at]
+            if latest_session and latest_session.last_active_at:
+                updated_candidates.append(latest_session.last_active_at)
+            for chunk in cw.chunks:
+                if getattr(chunk, "updated_at", ""):
+                    updated_candidates.append(chunk.updated_at)
+            activity_at = max((ts for ts in updated_candidates if ts), default=cw.created_at)
+            rows.append(
+                {
+                    "courseware_id": cw.id,
+                    "topic": cw.topic,
+                    "status": cw.status,
+                    "current_version": cw.current_version,
+                    "created_at": cw.created_at,
+                    "updated_at": activity_at,
+                    "chunk_count": len(cw.chunks),
+                    "last_chat_session_id": latest_session.id if latest_session else "",
+                    "last_chat_at": latest_session.last_active_at if latest_session else "",
+                    "last_chat_preview": last_chat_preview,
+                    "message_count": message_count,
+                }
+            )
+        rows.sort(key=lambda item: item.get("updated_at", "") or item.get("created_at", ""), reverse=True)
+        return rows[: max(1, int(limit or 80))]
+
+
 def build_services() -> Dict[str, object]:
     config = load_config()
     setup_logging(config.log_file_path, config.log_level)
@@ -1560,6 +1647,10 @@ def build_services() -> Dict[str, object]:
         base_dir=config.draft_storage_dir,
         index_path=str(Path(config.storage_index_dir) / "drafts.json"),
     )
+    search_runs = FileSearchRunRepo(
+        base_dir=config.search_run_storage_dir,
+        index_path=str(Path(config.storage_index_dir) / "search_runs.json"),
+    )
     profiles = InMemoryProfileRepo()
 
     retrieval_settings = RetrievalSettingsService()
@@ -1569,20 +1660,40 @@ def build_services() -> Dict[str, object]:
     embedding_client = EmbeddingClient(config)
     vector_store = VectorStore(config)
     query_rewriter = QueryRewriteService()
-    rag_service = RAGService(config, vector_store, embedding_client, asset_repo=assets, query_rewriter=query_rewriter)
+    rag_service = RAGService(
+        config,
+        vector_store,
+        embedding_client,
+        asset_repo=assets,
+        search_repo=search_runs,
+        query_rewriter=query_rewriter,
+    )
+    search_service = SearchService(retrieval_settings, search_runs, vector_store=vector_store, embedding_client=embedding_client)
 
     # Create CoursewareService first (needed by ChatService and QAService)
     courseware_service = CoursewareService(coursewares, event_store, knowledge_store)
 
+    chat_service = ChatService(
+        sessions,
+        messages,
+        llm,
+        event_store,
+        rag_service=rag_service,
+        embedding_client=embedding_client,
+        courseware_service=courseware_service,
+    )
+    history_service = HistoryService(courseware_service, chat_service)
+
     return {
         "config": config,
         "generation": GenerationService(
-            coursewares, jobs, assets, llm, event_store, knowledge_store,
-            config=config, embedding_client=embedding_client, rag_service=rag_service,
+            coursewares, jobs, assets, search_runs, llm, event_store, knowledge_store,
+            config=config, embedding_client=embedding_client, rag_service=rag_service, search_service=search_service,
         ),
         "courseware": courseware_service,
         "qa": QAService(coursewares, answers, llm, event_store, rag_service=rag_service, embedding_client=embedding_client, courseware_service=courseware_service),
-        "chat": ChatService(sessions, messages, llm, event_store, rag_service=rag_service, embedding_client=embedding_client, courseware_service=courseware_service),
+        "chat": chat_service,
+        "history": history_service,
         "rewrite": RewriteService(coursewares, drafts, llm, event_store, courseware_service=courseware_service),
         "assets": AssetService(
             assets,
@@ -1593,8 +1704,10 @@ def build_services() -> Dict[str, object]:
             config=config,
         ),
         "export": ExportService(coursewares, exports, event_store, knowledge_store),
+        "search": search_service,
         "retrieval_settings": retrieval_settings,
         "profile": profile_service,
+        "history_service": history_service,
         "monitoring": MonitoringService(event_store),
         "rag": rag_service,
         "vector_store": vector_store,
@@ -1608,6 +1721,7 @@ def build_services() -> Dict[str, object]:
             "sessions": sessions,
             "messages": messages,
             "drafts": drafts,
+            "search_runs": search_runs,
             "profiles": profiles,
         },
     }

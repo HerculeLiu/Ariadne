@@ -27,6 +27,8 @@ class AriadneAPI:
         self.rewrite = services["rewrite"]
         self.assets = services["assets"]
         self.export = services["export"]
+        self.search = services["search"]
+        self.history = services["history"]
         self.retrieval_settings = services["retrieval_settings"]
         self.profile = services["profile"]
         self.monitoring = services["monitoring"]
@@ -51,6 +53,8 @@ class AriadneAPI:
                 topic=payload.get("topic", ""),
                 keywords=[],
                 asset_ids=payload.get("asset_ids", []),
+                search_run_id=payload.get("search_run_id", ""),
+                selected_search_result_ids=payload.get("selected_search_result_ids", []),
             )
             return self._ok({"job_id": job.id, "courseware_id": courseware.id, "phase": job.phase.value})
         except AriadneError as exc:
@@ -89,6 +93,8 @@ class AriadneAPI:
                 "knowledge_doc_path": cw.knowledge_doc_path,
                 "knowledge_markdown": cw.knowledge_markdown,
                 "source_asset_ids": cw.source_asset_ids,  # Include source_asset_ids
+                "source_search_run_id": cw.source_search_run_id,
+                "source_search_result_ids": cw.source_search_result_ids,
                 "chunks": [
                     {
                         "id": chunk.id,
@@ -241,6 +247,13 @@ class AriadneAPI:
         except AriadneError as exc:
             return self._error(exc)
 
+    def list_history_coursewares(self, limit: int = 80) -> Dict[str, Any]:
+        try:
+            rows = self.history.list_coursewares(limit=limit)
+            return self._ok({"coursewares": rows})
+        except AriadneError as exc:
+            return self._error(exc)
+
     def rewrite_draft(self, page_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:
             draft = self.rewrite.create_draft(
@@ -293,6 +306,22 @@ class AriadneAPI:
 
     def get_retrieval_settings(self) -> Dict[str, Any]:
         return self._ok(asdict(self.retrieval_settings.get()))
+
+    def search_materials(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            run = self.search.search(
+                query=payload.get("query", ""),
+                top_k=int(payload.get("top_k", 8) or 8),
+            )
+            return self._ok(
+                {
+                    "search_run_id": run.id,
+                    "query": run.query,
+                    "results": [asdict(result) for result in run.results],
+                }
+            )
+        except AriadneError as exc:
+            return self._error(exc)
 
     def put_retrieval_settings(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         try:

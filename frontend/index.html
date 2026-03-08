@@ -107,6 +107,126 @@
       font-size: 12px;
     }
 
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .history-stage {
+      position: relative;
+      z-index: 2;
+      width: min(1240px, calc(100% - 36px));
+      margin: -144px auto 0;
+      border-radius: 32px 32px 0 0;
+      border: 1px solid rgba(126, 112, 96, 0.14);
+      border-bottom: 0;
+      background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,242,232,0.98) 100%);
+      box-shadow: 0 26px 80px rgba(32, 24, 18, 0.12);
+      overflow: hidden;
+    }
+
+    .history-stage-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 26px 18px;
+      border-bottom: 1px solid rgba(126, 112, 96, 0.12);
+    }
+
+    .history-title {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1.2;
+      color: var(--ink);
+    }
+
+    .history-subtitle {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .history-courseware-list {
+      padding: 16px 20px 28px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+
+    .history-courseware-item {
+      appearance: none;
+      border: 1px solid rgba(126, 112, 96, 0.12);
+      background: rgba(255,255,255,0.86);
+      border-radius: 24px;
+      padding: 16px;
+      text-align: left;
+      cursor: pointer;
+      display: grid;
+      gap: 12px;
+      align-content: space-between;
+      min-height: 168px;
+      transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+    }
+
+    .history-courseware-item:hover {
+      transform: translateY(-1px);
+      border-color: rgba(63, 118, 97, 0.18);
+      box-shadow: 0 14px 36px rgba(40, 32, 24, 0.08);
+    }
+
+    .history-courseware-top {
+      display: grid;
+      gap: 10px;
+    }
+
+    .history-courseware-topic {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--ink);
+      font-weight: 600;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .history-courseware-time {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .history-courseware-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(63, 118, 97, 0.08);
+      color: #2f5d4c;
+      font-weight: 600;
+      font-size: 11px;
+      width: fit-content;
+    }
+
+    .history-empty {
+      border: 1px dashed rgba(126, 112, 96, 0.18);
+      background: rgba(255,255,255,0.72);
+      border-radius: 20px;
+      padding: 24px 18px;
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
     kbd {
       border: 1px solid var(--line-strong);
       background: #fff;
@@ -902,6 +1022,208 @@
       to { transform: rotate(360deg); }
     }
 
+    .search-panel {
+      display: none;
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        linear-gradient(135deg, rgba(255, 251, 244, 0.96), rgba(247, 242, 231, 0.98));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.65);
+      gap: 10px;
+    }
+
+    .search-panel.visible {
+      display: grid;
+    }
+
+    .search-panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .search-panel-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .search-panel-meta {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .search-input {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 253, 248, 0.96);
+      padding: 10px 12px;
+      color: var(--ink);
+      font: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: border-color var(--fast), box-shadow var(--fast), background var(--fast);
+    }
+
+    .search-input:focus {
+      border-color: var(--olive-2);
+      box-shadow: 0 0 0 3px rgba(63, 118, 97, 0.12);
+      background: #fffdfa;
+    }
+
+    .search-action-btn {
+      border: 1px solid var(--line-strong);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 14px;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: transform var(--fast), border-color var(--fast), background var(--fast), color var(--fast);
+    }
+
+    .search-action-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: var(--olive-2);
+    }
+
+    .search-action-btn:disabled {
+      opacity: 0.55;
+      cursor: wait;
+      transform: none;
+    }
+
+    .search-action-btn.primary {
+      background: linear-gradient(135deg, var(--olive), var(--olive-2));
+      color: #f8f4ea;
+      border-color: transparent;
+    }
+
+    .search-results {
+      display: grid;
+      gap: 8px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    .search-results::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .search-results::-webkit-scrollbar-thumb {
+      background: var(--line-strong);
+      border-radius: 4px;
+    }
+
+    .search-result-empty {
+      padding: 12px 10px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      background: rgba(255, 252, 246, 0.72);
+    }
+
+    .search-result-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 253, 247, 0.94);
+      padding: 11px 12px;
+      display: grid;
+      gap: 8px;
+      transition: border-color var(--fast), box-shadow var(--fast), transform var(--fast), background var(--fast);
+    }
+
+    .search-result-card:hover {
+      transform: translateY(-1px);
+      border-color: #b9ad98;
+      box-shadow: 0 10px 22px rgba(48, 42, 30, 0.08);
+    }
+
+    .search-result-card.selected {
+      border-color: #a47450;
+      background: linear-gradient(135deg, rgba(248, 236, 224, 0.96), rgba(255, 248, 242, 0.98));
+      box-shadow: 0 10px 22px rgba(196, 111, 53, 0.14);
+    }
+
+    .search-result-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .search-result-select {
+      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: var(--olive);
+      cursor: pointer;
+    }
+
+    .search-result-body {
+      min-width: 0;
+      display: grid;
+      gap: 5px;
+    }
+
+    .search-result-title {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    .search-result-snippet {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #4b5761;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .search-result-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .search-result-link {
+      color: var(--olive);
+      text-decoration: none;
+      word-break: break-all;
+    }
+
+    .search-result-link:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
     .inspector-fab {
       position: fixed;
       right: 16px;
@@ -1096,6 +1418,33 @@
       .transition-nav-dock {
         display: none;
       }
+
+      .history-stage {
+        width: calc(100% - 24px);
+        margin-top: -104px;
+        border-radius: 24px 24px 0 0;
+      }
+
+      .history-stage-head {
+        padding: 18px 18px 14px;
+      }
+
+      .history-courseware-list {
+        padding: 12px 14px 24px;
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 1180px) {
+      .history-courseware-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 860px) {
+      .history-courseware-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
@@ -1132,9 +1481,11 @@
           <div style="font-size:12px">Personal Learning Craft</div>
         </div>
       </div>
-      <div class="kbd-list">
-        <span><kbd>Cmd/Ctrl</kbd> + <kbd>Enter</kbd> 生成</span>
-        <span><kbd>拖拽</kbd> 上传资料</span>
+      <div class="topbar-right">
+        <div class="kbd-list">
+          <span><kbd>Cmd/Ctrl</kbd> + <kbd>Enter</kbd> 生成</span>
+          <span><kbd>拖拽</kbd> 上传资料</span>
+        </div>
       </div>
     </header>
 
@@ -1207,6 +1558,26 @@
         <input id="assetFile" type="file" multiple style="display:none" accept=".pdf,.md,.txt,.docx" />
         <div id="assetFiles" class="asset-files"></div>
 
+        <section id="searchPanel" class="search-panel" aria-live="polite">
+          <div class="search-panel-head">
+            <div>
+              <h3 class="search-panel-title">网络资料搜索</h3>
+              <div id="searchMeta" class="search-panel-meta">打开网络搜索后，可以先筛一批外部资料，再和上传文件一起进入生成链。</div>
+            </div>
+            <div id="searchSelectionMeta" class="search-panel-meta">未选择搜索结果</div>
+          </div>
+
+          <div class="search-row">
+            <input id="searchQuery" class="search-input" type="text" placeholder="输入搜索词，例如：古诗 赏析 / LangGraph architecture / 贝叶斯定理 现实案例" />
+            <button id="btnSearchRun" class="search-action-btn primary" type="button">搜索</button>
+            <button id="btnSearchClear" class="search-action-btn" type="button">清空</button>
+          </div>
+
+          <div id="searchResults" class="search-results">
+            <div class="search-result-empty">开启网络搜索后，系统会先为你检索外部资料。你可以选择其中几条，把它们和上传文件一起用于生成课件。</div>
+          </div>
+        </section>
+
       </section>
 
       <!-- Structure Preview Panel -->
@@ -1270,6 +1641,17 @@
     </section>
   </div>
 
+  <section class="history-stage" aria-labelledby="historyTitle">
+    <div class="history-stage-head">
+      <div>
+        <h2 id="historyTitle" class="history-title">History</h2>
+      </div>
+    </div>
+    <div id="historyCoursewareList" class="history-courseware-list">
+      <div class="history-empty">还没有历史课件。</div>
+    </div>
+  </section>
+
   <div id="transitionStage" class="transition-stage" aria-hidden="true">
     <div class="transition-stage-overlay"></div>
     <div id="transitionNavDock" class="transition-nav-dock"></div>
@@ -1284,6 +1666,13 @@
       chunks: [],
       webEnabled: false,
       uploadedFiles: [],
+      searchRunId: "",
+      searchQuery: "",
+      searchResults: [],
+      selectedSearchResultIds: [],
+      searchLoading: false,
+      historyLoading: false,
+      historyCoursewares: [],
       // Structure preview state
       outlineSignature: null,  // Stable signature for outline change detection
       structure: null,
@@ -1316,6 +1705,67 @@
           el.style.display = 'none';
         }, duration);
       }
+    }
+
+    function formatHistoryTime(isoString) {
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) return '';
+      const now = new Date();
+      const diff = now - date;
+      if (diff < 60_000) return '刚刚';
+      if (diff < 3_600_000) return `${Math.max(1, Math.floor(diff / 60_000))} 分钟前`;
+      if (diff < 86_400_000) return `${Math.max(1, Math.floor(diff / 3_600_000))} 小时前`;
+      return `${date.getMonth() + 1}/${date.getDate()}`;
+    }
+
+    function renderHistoryCoursewares() {
+      const list = $('historyCoursewareList');
+      if (!list) return;
+
+      if (state.historyLoading) {
+        list.innerHTML = `<div class="history-empty">正在加载历史课件...</div>`;
+        return;
+      }
+      if (!Array.isArray(state.historyCoursewares) || state.historyCoursewares.length === 0) {
+        list.innerHTML = `<div class="history-empty">还没有历史课件。生成过的课件会按主页输入的问题出现在这里。</div>`;
+        return;
+      }
+      list.innerHTML = state.historyCoursewares.map((row) => `
+        <button class="history-courseware-item" type="button" data-courseware-id="${esc(row.courseware_id || '')}"${row.last_chat_session_id ? ` data-session-id="${esc(row.last_chat_session_id)}"` : ''}>
+          <div class="history-courseware-top">
+            <h3 class="history-courseware-topic">${esc(row.topic || '未命名课件')}</h3>
+            <span class="history-courseware-time">${esc(formatHistoryTime(row.last_chat_at || row.updated_at || row.created_at || ''))}</span>
+          </div>
+          <div class="history-courseware-meta">
+            <span>${esc(`${Number(row.chunk_count || 0)} Chunks`)}</span>
+          </div>
+        </button>
+      `).join('');
+    }
+
+    async function loadHistoryCoursewares() {
+      state.historyLoading = true;
+      renderHistoryCoursewares();
+      try {
+        const res = await api('/api/v1/history/coursewares?limit=80');
+        if (res.code !== 0) {
+          throw new Error(res.error?.reason || res.message || '加载历史记录失败');
+        }
+        state.historyCoursewares = Array.isArray(res.data && res.data.coursewares) ? res.data.coursewares : [];
+      } catch (err) {
+        state.historyCoursewares = [];
+        showToast(err && err.message ? err.message : '加载历史记录失败。', 'warn', 3600);
+      } finally {
+        state.historyLoading = false;
+        renderHistoryCoursewares();
+      }
+    }
+
+    function openHistoryCourseware(coursewareId, sessionId = '') {
+      if (!coursewareId) return;
+      const base = `/downloads/${encodeURIComponent(coursewareId)}.html`;
+      location.href = sessionId ? `${base}?session_id=${encodeURIComponent(sessionId)}` : base;
     }
 
     async function api(path, options = {}) {
@@ -1470,6 +1920,7 @@
       });
       state.webEnabled = put.code === 0 ? !!put.data.web_enabled : false;
       renderWebButton();
+      renderSearchPanel();
     }
 
     function renderWebButton() {
@@ -1478,6 +1929,130 @@
       btn.classList.add(state.webEnabled ? 'toggle-on' : 'toggle-off');
       btn.title = `网络搜索：${state.webEnabled ? '开' : '关'}`;
       btn.setAttribute('aria-label', btn.title);
+    }
+
+    function renderSearchPanel() {
+      const panel = $('searchPanel');
+      const queryInput = $('searchQuery');
+      const meta = $('searchMeta');
+      const selectionMeta = $('searchSelectionMeta');
+      const runBtn = $('btnSearchRun');
+      if (!panel || !queryInput || !meta || !selectionMeta || !runBtn) return;
+
+      panel.classList.toggle('visible', !!state.webEnabled);
+      queryInput.value = state.searchQuery || '';
+      runBtn.disabled = !state.webEnabled || state.searchLoading;
+      runBtn.textContent = state.searchLoading ? '搜索中...' : '搜索';
+
+      if (!state.webEnabled) {
+        meta.textContent = '网络搜索当前关闭。开启后可以先筛选外部资料，再把它们送进生成链。';
+      } else if (state.searchLoading) {
+        meta.textContent = '正在抓取搜索结果...';
+      } else if (state.searchRunId && state.searchResults.length) {
+        meta.textContent = `已检索 ${state.searchResults.length} 条结果。选择你真正想带进生成阶段的资料。`;
+      } else {
+        meta.textContent = '输入搜索词并点击“搜索”。如果主题已填写，开启开关后会自动搜索一次。';
+      }
+
+      const selected = state.selectedSearchResultIds.length;
+      selectionMeta.textContent = selected > 0 ? `已选 ${selected} 条结果` : '未选择搜索结果';
+      renderSearchResults();
+    }
+
+    function renderSearchResults() {
+      const container = $('searchResults');
+      if (!container) return;
+      if (!state.webEnabled) {
+        container.innerHTML = '';
+        return;
+      }
+      if (state.searchLoading) {
+        container.innerHTML = `
+          <div class="search-result-empty">
+            正在检索网络资料。第一次结果只返回标题与摘要；你勾选的结果会在生成前再抓正文并进入 RAG。
+          </div>
+        `;
+        return;
+      }
+      if (!state.searchResults.length) {
+        container.innerHTML = `
+          <div class="search-result-empty">
+            还没有搜索结果。你可以直接用主题作为搜索词，也可以自己改写搜索语句。
+          </div>
+        `;
+        return;
+      }
+      const selectedSet = new Set(state.selectedSearchResultIds);
+      container.innerHTML = state.searchResults.map((row) => `
+        <article class="search-result-card ${selectedSet.has(row.id) ? 'selected' : ''}" data-search-result-id="${esc(row.id)}">
+          <div class="search-result-top">
+            <input class="search-result-select" type="checkbox" data-search-result-toggle="${esc(row.id)}" ${selectedSet.has(row.id) ? 'checked' : ''} />
+            <div class="search-result-body">
+              <h4 class="search-result-title">${esc(row.title || '未命名结果')}</h4>
+              <p class="search-result-snippet">${esc(row.snippet || '暂无摘要。')}</p>
+            </div>
+          </div>
+          <div class="search-result-meta">
+            <span>${esc(row.domain || 'web')}</span>
+            <a class="search-result-link" href="${esc(row.url || '#')}" target="_blank" rel="noopener noreferrer">查看来源</a>
+          </div>
+        </article>
+      `).join('');
+    }
+
+    async function performSearch(queryOverride = '') {
+      if (!state.webEnabled) {
+        showToast('请先开启网络搜索。', 'warn', 3600);
+        return;
+      }
+      const query = String(queryOverride || $('searchQuery').value || $('topic').value || '').trim();
+      if (!query) {
+        showToast('请先输入搜索词。', 'warn', 3600);
+        return;
+      }
+      state.searchLoading = true;
+      state.searchQuery = query;
+      renderSearchPanel();
+      try {
+        const res = await api('/api/v1/search', {
+          method: 'POST',
+          body: JSON.stringify({ query, top_k: 8 }),
+        });
+        if (res.code !== 0) {
+          throw new Error(res.error?.reason || res.message || '搜索失败');
+        }
+        state.searchRunId = res.data && res.data.search_run_id ? String(res.data.search_run_id) : '';
+        state.searchResults = Array.isArray(res.data && res.data.results) ? res.data.results : [];
+        state.selectedSearchResultIds = [];
+        showToast(state.searchResults.length ? `搜索完成，命中 ${state.searchResults.length} 条结果。` : '没有检索到结果。', state.searchResults.length ? 'info' : 'warn', 2800);
+      } catch (err) {
+        state.searchRunId = '';
+        state.searchResults = [];
+        state.selectedSearchResultIds = [];
+        showToast(err && err.message ? err.message : '网络搜索失败。', 'warn', 4200);
+      } finally {
+        state.searchLoading = false;
+        renderSearchPanel();
+      }
+    }
+
+    function clearSearchState(render = true) {
+      state.searchRunId = '';
+      state.searchQuery = '';
+      state.searchResults = [];
+      state.selectedSearchResultIds = [];
+      state.searchLoading = false;
+      if (render) renderSearchPanel();
+    }
+
+    function toggleSearchResult(resultId) {
+      const id = String(resultId || '');
+      if (!id) return;
+      const selected = new Set(state.selectedSearchResultIds);
+      if (selected.has(id)) selected.delete(id);
+      else selected.add(id);
+      state.selectedSearchResultIds = Array.from(selected);
+      renderSearchPanel();
     }
 
     async function toggleWebSearch() {
@@ -1497,7 +2072,19 @@
       }
       state.webEnabled = put.data.web_enabled;
       renderWebButton();
-      showToast(`网络搜索已${state.webEnabled ? '开启' : '关闭'}`);
+      if (!state.webEnabled) {
+        renderSearchPanel();
+        showToast('网络搜索已关闭');
+        return;
+      }
+      if (!state.searchQuery && $('topic').value.trim()) {
+        state.searchQuery = $('topic').value.trim();
+      }
+      renderSearchPanel();
+      showToast('网络搜索已开启');
+      if ($('topic').value.trim()) {
+        await performSearch($('topic').value.trim());
+      }
     }
 
     async function generate() {
@@ -1510,6 +2097,10 @@
       const assetIds = getReadyAssetIds();
       if (assetIds.length > 0) {
         payload.asset_ids = assetIds;
+      }
+      if (state.webEnabled && state.searchRunId && state.selectedSearchResultIds.length) {
+        payload.search_run_id = state.searchRunId;
+        payload.selected_search_result_ids = Array.from(state.selectedSearchResultIds);
       }
 
       // Reset structure state
@@ -2122,6 +2713,35 @@
     });
 
     $('btnWebSearch').addEventListener('click', toggleWebSearch);
+    $('btnSearchRun').addEventListener('click', () => performSearch());
+    $('btnSearchClear').addEventListener('click', () => {
+      clearSearchState();
+      $('searchQuery').value = '';
+    });
+    $('historyCoursewareList').addEventListener('click', (e) => {
+      const item = e.target instanceof Element ? e.target.closest('.history-courseware-item') : null;
+      if (!(item instanceof HTMLElement)) return;
+      openHistoryCourseware(item.dataset.coursewareId || '', item.dataset.sessionId || '');
+    });
+    $('searchQuery').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        performSearch();
+      }
+    });
+    $('searchResults').addEventListener('click', (e) => {
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      const toggle = target.closest('[data-search-result-toggle]');
+      if (toggle) {
+        toggleSearchResult(toggle.getAttribute('data-search-result-toggle') || '');
+        return;
+      }
+      const card = target.closest('[data-search-result-id]');
+      if (!card) return;
+      if (target.closest('a')) return;
+      toggleSearchResult(card.getAttribute('data-search-result-id') || '');
+    });
     $('inspectorFab').addEventListener('click', () => {
       if (inspectState.active) stopInspectMode();
       else startInspectMode();
@@ -2169,6 +2789,9 @@
     bindDragUpload();
     bindShortcuts();
     syncWebSetting();
+    loadHistoryCoursewares();
+    renderHistoryCoursewares();
+    renderSearchPanel();
     window.addEventListener('beforeunload', () => {
       if (progressPollTimer) clearInterval(progressPollTimer);
     });

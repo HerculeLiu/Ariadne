@@ -196,6 +196,10 @@ class AriadneHandler(BaseHTTPRequestHandler):
             page_id = query.get("page_id", [None])[0]
             return self._send_json(self.api.list_chat_sessions(courseware_id, page_id))
 
+        if path == "/api/v1/history/coursewares":
+            limit = int(query.get("limit", ["80"])[0] or 80)
+            return self._send_json(self.api.list_history_coursewares(limit=limit))
+
         if path == "/api/v1/logs/events":
             event_type = query.get("event_type", [None])[0]
             return self._send_json(self.api.get_logs(event_type=event_type))
@@ -228,6 +232,9 @@ class AriadneHandler(BaseHTTPRequestHandler):
 
         if path == "/api/v1/coursewares/generate":
             return self._send_json(self.api.generate_courseware(payload))
+
+        if path == "/api/v1/search":
+            return self._send_json(self.api.search_materials(payload))
 
         if path.startswith("/api/v1/chunks/") and path.endswith("/ask"):
             chunk_id = path.split("/")[4]

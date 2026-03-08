@@ -1105,6 +1105,13 @@
         return false;
       }}
     }})();
+    const requestedSessionId = (() => {{
+      try {{
+        return new URLSearchParams(location.search).get('session_id') || '';
+      }} catch (_) {{
+        return '';
+      }}
+    }})();
 
     async function apiJson(path, options = {{}}) {{
       const res = await fetch(path, {{ headers: {{ 'Content-Type': 'application/json' }}, ...options }});
@@ -1395,6 +1402,32 @@
         console.error('Failed to load chat sessions:', err);
       }}
     }}
+    function resolveStoredMessageChunks(msg) {{
+      const ids = Array.isArray(msg && msg.selected_chunk_ids) ? msg.selected_chunk_ids : [];
+      if (!ids.length) return [];
+      const chunks = [];
+      ids.forEach((chunkId) => {{
+        const key = findChunkKeyById(String(chunkId || '').trim());
+        const snapshot = key ? getChunkSnapshotByKey(key) : null;
+        if (!snapshot) return;
+        chunks.push({{
+          key,
+          chunkId: snapshot.chunkId,
+          label: chunkLabel(snapshot.chapterIdx, snapshot.chunkIdx),
+          title: snapshot.title,
+          content: [snapshot.title, snapshot.content].filter(Boolean).join('\\n'),
+        }});
+      }});
+      return chunks;
+    }}
+    function renderStoredChatMessage(msg) {{
+      if (!msg) return;
+      if (msg.role === 'user') {{
+        appendChat('user', msg.content || '', resolveStoredMessageChunks(msg));
+        return;
+      }}
+      appendChat(msg.role || 'assistant', msg.content || '');
+    }}
     function renderHistoryList() {{
       const list = $('historyList');
       if (!list) return;
@@ -1446,7 +1479,7 @@
         appendChat('assistant', 'Failed to create new chat session');
       }}
     }}
-    async function switchSession(sessionId) {{
+    async function switchSession(sessionId, suppressError = false) {{
       try {{
         chatState.sessionId = sessionId;
         const data = await apiJson('/api/v1/chat/sessions', {{
@@ -1458,14 +1491,31 @@
           if (!list) return;
           list.innerHTML = '';
           data.data.messages.forEach(msg => {{
-            appendChat(msg.role, msg.content);
+            renderStoredChatMessage(msg);
           }});
           renderHistoryList();
         }}
       }} catch (err) {{
         console.error('Failed to switch session:', err);
-        appendChat('assistant', 'Failed to load chat history');
+        if (!suppressError) {{
+          appendChat('assistant', 'Failed to load chat history');
+        }}
       }}
+    }}
+    async function restoreLatestChatSession() {{
+      await loadChatSessions();
+      if (requestedSessionId) {{
+        const matched = chatState.sessions.some((session) => session.id === requestedSessionId);
+        if (matched) {{
+          await switchSession(requestedSessionId, true);
+          return;
+        }}
+      }}
+      if (chatState.sessions.length > 0) {{
+        await switchSession(chatState.sessions[0].id, true);
+        return;
+      }}
+      clearChatList();
     }}
     async function sendChatMessage() {{
       if (chatState.sending) return;
@@ -2425,7 +2475,6 @@
     }}
 
     autoGrowChatInput();
-    loadCoursewareVersion();
     document.addEventListener('mousemove', (e) => {{
       if (!inspectState.active) return;
       const el = e.target;
@@ -2455,12 +2504,16 @@
       openInspectorModal(inspectState.selectedMeta);
       stopInspectMode();
     }}, true);
-    try {{
-      if (embedMode) document.body.classList.add('embed-mode');
-      render();
-    }} catch (err) {{
-      showContentFallback(err && err.message ? err.message : String(err));
-    }}
+    (async () => {{
+      try {{
+        if (embedMode) document.body.classList.add('embed-mode');
+        await loadCoursewareVersion();
+        await restoreLatestChatSession();
+        render();
+      }} catch (err) {{
+        showContentFallback(err && err.message ? err.message : String(err));
+      }}
+    }})();
 
     // ==================== Chunk 修改功能 ====================
     const chunkModifications = new Map();
