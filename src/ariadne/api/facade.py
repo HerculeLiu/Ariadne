@@ -6,6 +6,8 @@ from dataclasses import asdict
 from typing import Any, Dict
 from uuid import uuid4
 
+from ariadne.application.knowledge import blocks_to_markdown, blocks_to_plain_text, normalize_structured_blocks
+from ariadne.application.query_rewrite import QueryRewriteService
 from ariadne.application.services import build_services
 from ariadne.domain.errors import AriadneError, NotFoundError
 from ariadne.domain.models import AssetStatus
@@ -100,6 +102,7 @@ class AriadneAPI:
                         "id": chunk.id,
                         "title": chunk.title,
                         "content": chunk.content,
+                        "blocks": chunk.blocks,
                         "order_no": chunk.order_no,
                         "chapter_no": chunk.chapter_no,
                         "chunk_no": chunk.chunk_no,
@@ -378,12 +381,44 @@ class AriadneAPI:
         try:
             message = payload.get("message", "")
             chunks = payload.get("chunks", [])
+            courseware_id = str(payload.get("courseware_id", "")).strip()
             explicit_mode = payload.get("explicit_mode", False)
+            wants_modification = self._looks_like_modification_request(message)
+            logger.info(
+                "analyze_intent start explicit_mode=%s chunk_count=%s wants_modification=%s courseware_id=%s message=%s",
+                explicit_mode,
+                len(chunks or []),
+                wants_modification,
+                courseware_id,
+                (message or "")[:120],
+            )
+
+            if not chunks and courseware_id and (explicit_mode or wants_modification):
+                chunks = self._resolve_target_chunks(courseware_id, message, limit=3)
+                logger.info(
+                    "analyze_intent auto_resolve chunk_count=%s courseware_id=%s",
+                    len(chunks or []),
+                    courseware_id,
+                )
+                if self._should_require_target_resolution(message, chunks):
+                    logger.info(
+                        "analyze_intent target_resolution_required courseware_id=%s candidates=%s message=%s",
+                        courseware_id,
+                        len(chunks or []),
+                        (message or "")[:120],
+                    )
+                    return self._ok({
+                        "is_modification": True,
+                        "needs_target_resolution": True,
+                        "candidate_chunks": chunks,
+                        "chat_reply": "定位到多个可能的卡片，请先选择要修改的目标卡片。",
+                        "chunks": [],
+                    })
 
             if not chunks:
                 return self._ok({
                     "is_modification": False,
-                    "chat_reply": "请先选择要修改的 chunks"
+                    "chat_reply": "没有定位到要修改的卡片，请先选中卡片，或在问题里说清第几章/哪一张卡片。"
                 })
 
             if not message:
@@ -392,13 +427,22 @@ class AriadneAPI:
                     "chat_reply": "请描述你的修改意图"
                 })
 
-            # 选择 prompt
             llm = self.generation.llm
-            if explicit_mode:
-                system_prompt = llm.prompts.get("intent_edit_explicit.md")
-            else:
-                system_prompt = llm.prompts.get("intent_edit_implicit.md")
+            if explicit_mode or wants_modification:
+                result = self._direct_explicit_rewrite(
+                    message=message,
+                    chunks=chunks,
+                    llm=llm,
+                )
+                logger.info(
+                    "analyze_intent finish path=%s modified=%s chunk_count=%s",
+                    "explicit_direct_rewrite" if explicit_mode else "auto_direct_rewrite",
+                    result.get("is_modification"),
+                    len(result.get("chunks", []) or []),
+                )
+                return self._ok(result)
 
+            system_prompt = llm.prompts.get("intent_edit_implicit.md")
             if not system_prompt:
                 return self._ok({
                     "is_modification": False,
@@ -424,6 +468,17 @@ class AriadneAPI:
 
             # 解析 JSON 响应
             result = self._parse_json_response(response)
+            result = self._normalize_intent_result(
+                result=result,
+                message=message,
+                chunks=chunks,
+                llm=llm,
+            )
+            logger.info(
+                "analyze_intent finish path=classifier modified=%s chunk_count=%s",
+                result.get("is_modification"),
+                len(result.get("chunks", []) or []),
+            )
             return self._ok(result)
         except AriadneError as exc:
             return self._error(exc)
@@ -456,18 +511,490 @@ class AriadneAPI:
                 "chunks": []
             }
 
+    def _looks_like_modification_request(self, message: str) -> bool:
+        text = (message or "").strip().lower()
+        if not text:
+            return False
+        direct_terms = (
+            "修改",
+            "改一下",
+            "改成",
+            "重写",
+            "优化",
+            "润色",
+            "删除",
+            "删掉",
+            "做成",
+            "做一个",
+            "加一个",
+            "加一张",
+            "加个",
+            "添加",
+            "换成",
+            "改为",
+        )
+        if any(term in text for term in direct_terms):
+            return True
+        patterns = (
+            r"(?:这个|那个|这张|那张|这个卡片|那个卡片|这一段|那一段).{0,10}(?:修改|改一下|改成|重写|做成)",
+            r"(?:第\s*\d+\s*章.{0,8}(?:第\s*\d+\s*(?:个)?\s*(?:chunk|块|小节|部分)?|chunk\s*\d+|\d+\.\d+)).{0,12}(?:修改|改一下|改成|做成|删除)",
+        )
+        return any(re.search(pattern, text, re.I) for pattern in patterns)
+
+    def _extract_chunk_reference(self, query: str) -> tuple[int | None, int | None]:
+        text = (query or "").strip()
+        if not text:
+            return None, None
+        match = re.search(r"\b(\d+)\.(\d+)\b", text)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+        chapter_match = re.search(r"第\s*(\d+)\s*章", text)
+        chunk_match = re.search(r"第\s*(\d+)\s*(?:个)?\s*(?:chunk|块|小节|部分|卡片)", text, flags=re.I)
+        if not chunk_match:
+            chunk_match = re.search(r"(?:chunk|块|小节|部分|卡片)\s*(\d+)", text, flags=re.I)
+        chapter_no = int(chapter_match.group(1)) if chapter_match else None
+        chunk_no = int(chunk_match.group(1)) if chunk_match else None
+        return chapter_no, chunk_no
+
+    def _normalize_chunk_title_for_match(self, title: str) -> str:
+        text = str(title or "").strip()
+        text = re.sub(r"^\s*(?:chapter\s*)?\d+(?:[.\s]\d+)*\s*", "", text, flags=re.I)
+        text = re.sub(r"^[\s:：\-—.、]+", "", text)
+        text = re.sub(r"[，,。！？?!.；;：:（）()“”\"'、\[\]{}<>/\\\\|`~@#$%^&*_+=\-\s]+", "", text)
+        return text.lower()
+
+    def _extract_target_phrase(self, message: str) -> str:
+        text = str(message or "").strip()
+        if not text:
+            return ""
+        patterns = (
+            r"把\s*(.+?)\s*(?:这张|那个|这个)?\s*(?:卡片|chunk|块|小节|部分)?\s*(?:改|修改|改成|重写|做成|换成|加上|添加)",
+            r"将\s*(.+?)\s*(?:这张|那个|这个)?\s*(?:卡片|chunk|块|小节|部分)?\s*(?:改|修改|改成|重写|做成|换成|加上|添加)",
+            r"修改\s*(.+?)\s*(?:这张|那个|这个)?\s*(?:卡片|chunk|块|小节|部分)",
+            r"把\s*(.+?)\s*(?:做成|改成)\s*(?:一个|一张|可交互|交互|模拟|demo|interactive|视频|图片)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.I)
+            if match:
+                candidate = match.group(1).strip()
+                if candidate:
+                    return self._cleanup_target_phrase(candidate)
+        return self._cleanup_target_phrase(text)
+
+    def _cleanup_target_phrase(self, text: str) -> str:
+        value = str(text or "").strip()
+        if not value:
+            return ""
+        value = re.sub(
+            r"(?:请|帮我|帮忙|给我|你来|一下|一个|一张|这个|那个|这张|那张|卡片|卡|chunk|块|小节|部分|内容|课件)",
+            " ",
+            value,
+            flags=re.I,
+        )
+        value = re.sub(
+            r"(?:修改|改一下|改成|重写|优化|润色|删除|删掉|做成|做一个|加一个|加一张|加个|添加|换成|改为|可交互的|交互式的|可运行的|模拟的|demo|interactive|widget|视频版|图片版|图片讲解|视频讲解|演示)",
+            " ",
+            value,
+            flags=re.I,
+        )
+        value = re.sub(r"\s+", " ", value).strip()
+        return value
+
+    def _build_chunk_payload(self, courseware, chunk) -> Dict[str, Any]:
+        chapter_idx = max(0, int(chunk.chapter_no or 1) - 1)
+        chunk_idx = max(0, int(chunk.chunk_no or chunk.order_no or 1) - 1)
+        label = f"Chapter {chapter_idx + 1} · Chunk {chunk_idx + 1}"
+        return {
+            "key": f"{chapter_idx}-{chunk_idx}",
+            "label": label,
+            "title": chunk.title,
+            "content": chunk.content,
+            "chunk_id": chunk.id,
+            "courseware_id": courseware.id,
+        }
+
+    def _should_require_target_resolution(self, message: str, resolved_chunks: list[Dict[str, Any]]) -> bool:
+        if len(resolved_chunks or []) <= 1:
+            return False
+        chapter_no, chunk_no = self._extract_chunk_reference(message)
+        if chapter_no or chunk_no:
+            return False
+        target_phrase = self._extract_target_phrase(message)
+        target_norm = self._normalize_chunk_title_for_match(target_phrase)
+        if not target_norm:
+            return True
+        first = resolved_chunks[0]
+        second = resolved_chunks[1]
+        first_title = self._normalize_chunk_title_for_match(str(first.get("title", "")))
+        second_title = self._normalize_chunk_title_for_match(str(second.get("title", "")))
+        if target_norm == first_title and target_norm != second_title:
+            return False
+        first_score = float(first.get("match_score", 0.0) or 0.0)
+        second_score = float(second.get("match_score", 0.0) or 0.0)
+        return abs(first_score - second_score) < 6.0
+
+    def _resolve_target_chunks(self, courseware_id: str, message: str, limit: int = 3) -> list[Dict[str, Any]]:
+        if not courseware_id:
+            return []
+        courseware = self.courseware.get(courseware_id)
+        if not courseware or not courseware.chunks:
+            return []
+
+        query = (message or "").strip()
+        if not query:
+            return []
+
+        ref_chapter_no, ref_chunk_no = self._extract_chunk_reference(query)
+        target_phrase = self._extract_target_phrase(query)
+        target_phrase_norm = self._normalize_chunk_title_for_match(target_phrase)
+        rewriter = QueryRewriteService()
+        rewrite = rewriter.rewrite(query, topic=courseware.topic, max_queries=3)
+        all_queries = rewrite.all_queries()
+        terms = rewriter.extract_keywords(" ".join(x for x in [query, target_phrase] if x))
+        ranked: list[tuple[Any, float]] = []
+        exact_title_matches: list[Any] = []
+
+        if target_phrase_norm:
+            for chunk in courseware.chunks:
+                title_norm = self._normalize_chunk_title_for_match(getattr(chunk, "title", ""))
+                if title_norm and title_norm == target_phrase_norm:
+                    exact_title_matches.append(chunk)
+            if exact_title_matches:
+                rows: list[Dict[str, Any]] = []
+                for chunk in exact_title_matches[:limit]:
+                    row = self._build_chunk_payload(courseware, chunk)
+                    row["match_score"] = 100.0
+                    rows.append(row)
+                return rows
+
+        for chunk in courseware.chunks:
+            title = (chunk.title or "").strip()
+            content = (chunk.content or "").strip()
+            if not title and not content:
+                continue
+            title_lower = title.lower()
+            content_lower = content.lower()
+            title_norm = self._normalize_chunk_title_for_match(title)
+            score = 0.0
+
+            if ref_chapter_no and int(chunk.chapter_no or 0) == ref_chapter_no:
+                score += 4.0
+                if ref_chunk_no and int(chunk.chunk_no or chunk.order_no or 0) == ref_chunk_no:
+                    score += 8.0
+
+            if target_phrase_norm:
+                if target_phrase_norm == title_norm:
+                    score += 20.0
+                elif target_phrase_norm and target_phrase_norm in title_norm:
+                    score += 12.0
+                elif target_phrase_norm and target_phrase_norm in re.sub(r"\s+", "", content_lower):
+                    score += 3.5
+
+            for full_query in all_queries:
+                normalized = full_query.strip().lower()
+                if len(normalized) < 2:
+                    continue
+                if normalized == title_lower:
+                    score += 8.0
+                elif normalized in title_lower:
+                    score += 4.0
+                elif normalized in content_lower:
+                    score += 1.5
+
+            for term in terms:
+                lowered = term.lower()
+                if len(lowered) < 2:
+                    continue
+                if lowered == title_lower:
+                    score += 6.0
+                elif lowered in title_lower:
+                    score += 2.2
+                elif lowered in content_lower:
+                    score += 0.8
+
+            if score > 0:
+                ranked.append((chunk, score))
+
+        ranked.sort(key=lambda item: item[1], reverse=True)
+        rows: list[Dict[str, Any]] = []
+        for chunk, score in ranked[:limit]:
+            row = self._build_chunk_payload(courseware, chunk)
+            row["match_score"] = round(float(score), 3)
+            rows.append(row)
+        return rows
+
+    def _direct_explicit_rewrite(self, message: str, chunks: list, llm) -> Dict[str, Any]:
+        rewritten_rows = []
+        for chunk in chunks or []:
+            if not isinstance(chunk, dict):
+                continue
+            key = str(chunk.get("key", "")).strip()
+            label = str(chunk.get("label", "")).strip()
+            source_title = str(chunk.get("title", "")).strip()
+            source_content = str(chunk.get("content", "")).strip()
+            logger.info(
+                "explicit_rewrite chunk_start key=%s label=%s title=%s content_len=%s",
+                key,
+                label,
+                source_title[:80],
+                len(source_content),
+            )
+            rewritten_blocks = []
+            rewrite_path = "structured_empty"
+            try:
+                rewritten_blocks = normalize_structured_blocks(llm.rewrite_chunk_structured(
+                    original=source_content,
+                    instruction=message,
+                ))
+                if rewritten_blocks:
+                    rewrite_path = "structured_success"
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("explicit_rewrite structured_failed key=%s reason=%s", key, exc)
+                rewritten_blocks = []
+                rewrite_path = "structured_error"
+
+            row = {
+                "key": key,
+                "label": label,
+                "should_modify": True,
+                "reason": "explicit_ai_edit_mode",
+                "new_title": source_title,
+                "rewritten_content": blocks_to_plain_text(rewritten_blocks),
+                "rewritten_blocks": rewritten_blocks,
+            }
+            before_fallback = list(row.get("rewritten_blocks", []) or [])
+            row = self._enforce_structured_result(message, row, chunk)
+            after_fallback = list(row.get("rewritten_blocks", []) or [])
+            if after_fallback != before_fallback:
+                rewrite_path = "fallback_forced"
+            logger.info(
+                "explicit_rewrite chunk_finish key=%s path=%s block_count=%s meta_artifact=%s content_preview=%s",
+                key,
+                rewrite_path,
+                len(after_fallback),
+                self._looks_like_meta_artifact(str(row.get("rewritten_content", ""))),
+                str(row.get("rewritten_content", ""))[:160],
+            )
+            rewritten_rows.append(row)
+        return {
+            "is_modification": True,
+            "chat_reply": "",
+            "chunks": rewritten_rows,
+        }
+
+    def _needs_structured_card(self, message: str) -> bool:
+        text = (message or "").strip().lower()
+        if not text:
+            return False
+        direct_terms = (
+            "可交互",
+            "模拟例子",
+            "模拟器",
+            "可运行",
+            "运行例子",
+            "拖动演示",
+            "demo",
+            "interactive",
+            "widget",
+        )
+        if any(token in text for token in direct_terms):
+            return True
+        patterns = (
+            r"做(?:一个|一张|成)?[^。！？\n]{0,12}(?:演示|模拟|例子|demo)",
+            r"(?:添加|插入|放一段|加(?:一个|一张|一段)?)[^。！？\n]{0,8}(?:视频|图片|图像|插图)",
+            r"做成[^。！？\n]{0,12}(?:交互|可运行|可交互)",
+            r"(?:做|加|插入)[^。！？\n]{0,10}(?:interactive|widget)",
+        )
+        return any(re.search(pattern, text, re.I) for pattern in patterns)
+
+    def _looks_like_meta_artifact(self, text: str) -> bool:
+        lowered = (text or "").strip().lower()
+        if not lowered:
+            return False
+        has_html_structure = (
+            "<!doctype html" in lowered
+            or ("<html" in lowered and "<body" in lowered)
+            or ("<script" in lowered and "<style" in lowered and "function" in lowered)
+        )
+        if has_html_structure:
+            return True
+        meta_phrases = (
+            "复制下面代码到",
+            "保存为 .html 文件",
+            "保存为html文件",
+            "双击 index.html",
+            "双击文件，浏览器中打开",
+            "请在编辑器中使用",
+            "ai卡片生成工具",
+            "演示概念",
+            "交互设计",
+            "下一步操作",
+            "需要我帮你",
+            "或者直接告诉我",
+            "我来帮你设计",
+            "核心理念",
+            "预期交互",
+            "如何创建",
+        )
+        return any(phrase in lowered for phrase in meta_phrases)
+
+    def _contains_supported_display_blocks(self, text: str) -> bool:
+        value = self._sanitize_structured_markdown(text)
+        return bool(re.search(r"```(?:example|demo|image|video|interactive)\b", value, re.I))
+
+    def _sanitize_structured_markdown(self, text: str) -> str:
+        value = str(text or "")
+        if not value:
+            return value
+        # Turn escaped newlines back into real newlines for model outputs that flattened markdown.
+        value = value.replace("\\n", "\n")
+        # Be tolerant to malformed double-backtick fences produced by the model or intermediate layers.
+        value = re.sub(
+            r"(?m)^(\s*)``(?=\s*(?:example|demo|image|video|interactive)\b)",
+            r"\1```",
+            value,
+        )
+        value = re.sub(r"(?m)^(\s*)``\s*$", r"\1```", value)
+        return value
+
+    def _build_structured_card_fallback(self, message: str, source_chunk: dict) -> list[dict]:
+        text = (message or "").strip().lower()
+        title = str(source_chunk.get("title", "")).strip() or "交互演示"
+        content = str(source_chunk.get("content", "")).strip()
+
+        first_paragraph = ""
+        for piece in re.split(r"\n\s*\n+", content):
+            cleaned = piece.strip()
+            if cleaned:
+                first_paragraph = re.sub(r"\s+", " ", cleaned)
+                break
+        if len(first_paragraph) > 120:
+            first_paragraph = first_paragraph[:117].rstrip() + "..."
+
+        intro = f"下面给出一个最小可运行的卡片示例，帮助理解“{title}”。"
+        if first_paragraph:
+            intro += f"\n\n核心提示：{first_paragraph}"
+
+        if any(token in text for token in ("拖动", "拖拽")):
+            demo_title = title if len(title) <= 24 else (title[:24].rstrip() + "…")
+            blocks = [
+                {"type": "paragraph", "text": intro},
+                {
+                    "type": "interactive",
+                    "title": f"{demo_title} · 结构演示",
+                    "description": "拖动点 P，观察同一条边上的位置变化如何对应表达层次的推进。",
+                    "widget": "triangle-point-slider",
+                    "edge": "AB",
+                    "initial_t": 0.42,
+                    "triangle": [[0.08, 0.86], [0.92, 0.86], [0.46, 0.14]],
+                },
+            ]
+            return normalize_structured_blocks(blocks)
+
+        if any(token in text for token in ("可交互", "模拟", "demo", "演示", "可运行")):
+            demo_title = title if len(title) <= 24 else (title[:24].rstrip() + "…")
+            blocks = [
+                {"type": "paragraph", "text": intro},
+                {
+                    "type": "demo",
+                    "title": f"{demo_title} · 模拟练习",
+                    "description": "点击运行，观察更好的表达方式会如何组织信息。",
+                    "mode": "typing",
+                    "input": "先铺陈细节，再让听众自己猜结论",
+                    "output": "先给结论，再给两到三点支撑理由，最后补充关键细节。",
+                    "button_label": "运行看看",
+                },
+            ]
+            return normalize_structured_blocks(blocks)
+
+        return []
+
+    def _enforce_structured_result(self, message: str, row: dict, source_chunk: dict) -> dict:
+        if not row.get("should_modify") or not self._needs_structured_card(message):
+            return row
+        current_blocks = normalize_structured_blocks(row.get("rewritten_blocks", []))
+        row["rewritten_blocks"] = current_blocks
+        row["rewritten_content"] = blocks_to_plain_text(current_blocks)
+        if current_blocks and not self._looks_like_meta_artifact(str(row.get("rewritten_content", ""))):
+            return row
+        fallback = self._build_structured_card_fallback(message, source_chunk)
+        if fallback:
+            row["rewritten_blocks"] = fallback
+            row["rewritten_content"] = blocks_to_plain_text(fallback)
+        return row
+
+    def _normalize_intent_result(
+        self,
+        result: Dict[str, Any],
+        message: str,
+        chunks: list,
+        llm,
+    ) -> Dict[str, Any]:
+        if not isinstance(result, dict):
+            return {"is_modification": False, "chat_reply": "", "chunks": []}
+        if not result.get("is_modification"):
+            return result
+        by_key = {
+            str(chunk.get("key", "")): chunk
+            for chunk in (chunks or [])
+            if isinstance(chunk, dict) and chunk.get("key")
+        }
+        needs_structured = self._needs_structured_card(message)
+        structured_rewrites = 0
+        structured_rewrite_limit = 1
+        normalized_chunks = []
+        for item in result.get("chunks", []) or []:
+            if not isinstance(item, dict):
+                continue
+            row = dict(item)
+            rewritten_blocks = normalize_structured_blocks(row.get("rewritten_blocks", []))
+            if rewritten_blocks:
+                row["rewritten_blocks"] = rewritten_blocks
+                row["rewritten_content"] = blocks_to_plain_text(rewritten_blocks)
+            source_chunk = by_key.get(str(row.get("key", "")), {})
+            current_content = str(row.get("rewritten_content", "")).strip()
+            row["rewritten_content"] = current_content
+            if row.get("should_modify") and needs_structured and (
+                not current_content or self._looks_like_meta_artifact(current_content)
+                or not rewritten_blocks
+            ) and structured_rewrites < structured_rewrite_limit:
+                structured = normalize_structured_blocks(llm.rewrite_chunk_structured(
+                    original=str(source_chunk.get("content", "")),
+                    instruction=message,
+                ))
+                if structured:
+                    row["rewritten_blocks"] = structured
+                    row["rewritten_content"] = blocks_to_plain_text(structured)
+                    structured_rewrites += 1
+                    rewritten_blocks = structured
+                    current_content = str(row.get("rewritten_content", "")).strip()
+            current_content = str(row.get("rewritten_content", "")).strip()
+            row["rewritten_content"] = current_content
+            if row.get("should_modify") and needs_structured and (
+                not current_content or self._looks_like_meta_artifact(current_content)
+                or not rewritten_blocks
+            ):
+                fallback = self._build_structured_card_fallback(message, source_chunk)
+                if fallback:
+                    row["rewritten_blocks"] = fallback
+                    row["rewritten_content"] = blocks_to_plain_text(fallback)
+            row = self._enforce_structured_result(message, row, source_chunk)
+            normalized_chunks.append(row)
+        result["chunks"] = normalized_chunks
+        return result
+
     def apply_chunk_modification(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """应用 chunk 修改"""
         try:
             chunk_id = payload.get("chunk_id", "")
-            new_content = payload.get("new_content", "")
+            new_blocks = normalize_structured_blocks(payload.get("new_blocks", []))
             new_title = payload.get("new_title")
             expected_version = payload.get("expected_version", 0)
 
             if not chunk_id:
                 return self._error(NotFoundError("chunk_id is required"))
-            if not new_content:
-                return self._error(NotFoundError("new_content is required"))
+            if not new_blocks:
+                return self._error(NotFoundError("new_blocks is required"))
 
             # 找到 chunk
             cw, chunk = self._find_chunk_by_key(chunk_id)
@@ -476,7 +1003,8 @@ class AriadneAPI:
                 raise VersionConflictError("version mismatch", field="expected_version", reason="current version changed")
 
             # 更新内容和标题
-            chunk.content = new_content
+            chunk.blocks = new_blocks
+            chunk.content = blocks_to_plain_text(new_blocks)
             if new_title:
                 chunk.title = new_title
 

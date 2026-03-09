@@ -322,6 +322,187 @@
       margin-top:8px; display:none; background:rgba(255,255,255,.88); border:1px solid rgba(136,166,172,.24); border-radius:10px; padding:9px;
       white-space:pre-wrap; color:#304049;
     }}
+    .chunk-embeds {{
+      display: grid;
+      gap: 12px;
+      margin-top: 12px;
+    }}
+    .chunk-embed {{
+      border: 1px solid rgba(136,166,172,.2);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(248,252,251,.92), rgba(241,247,247,.92));
+      box-shadow: 0 10px 24px rgba(48,42,30,.05);
+      overflow: hidden;
+    }}
+    .chunk-embed-head {{
+      padding: 12px 14px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }}
+    .chunk-embed-kicker {{
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #628d97;
+    }}
+    .chunk-embed-title {{
+      font-size: 16px;
+      font-weight: 600;
+      color: #223941;
+    }}
+    .chunk-embed-desc {{
+      margin: 0;
+      font-size: 13px;
+      color: #58717a;
+      line-height: 1.6;
+    }}
+    .chunk-embed-body {{
+      padding: 12px 14px 14px;
+    }}
+    .chunk-example-grid {{
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }}
+    .chunk-example-cell {{
+      border: 1px solid rgba(136,166,172,.18);
+      border-radius: 12px;
+      background: rgba(255,255,255,.76);
+      padding: 10px 12px;
+    }}
+    .chunk-example-label {{
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #6c8e96;
+      margin-bottom: 6px;
+    }}
+    .chunk-example-value {{
+      font-size: 14px;
+      line-height: 1.65;
+      color: #304049;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }}
+    .chunk-demo-input {{
+      border: 1px solid rgba(136,166,172,.18);
+      border-radius: 12px;
+      background: rgba(255,255,255,.78);
+      padding: 10px 12px;
+      color: #304049;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }}
+    .chunk-demo-actions {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }}
+    .chunk-demo-run {{
+      border: none;
+      border-radius: 10px;
+      padding: 8px 14px;
+      background: linear-gradient(135deg, #6d9f96, #8fbeca);
+      color: #f6fbfb;
+      cursor: pointer;
+      font-weight: 700;
+      box-shadow: 0 8px 18px rgba(109,159,150,.18);
+    }}
+    .chunk-demo-run:hover {{
+      filter: brightness(.98);
+    }}
+    .chunk-demo-output {{
+      margin-top: 10px;
+      display: none;
+      border: 1px solid rgba(136,166,172,.18);
+      border-radius: 12px;
+      background: rgba(235,243,245,.9);
+      padding: 10px 12px;
+      color: #31424a;
+      white-space: pre-wrap;
+      line-height: 1.65;
+    }}
+    .chunk-media {{
+      display: grid;
+      gap: 10px;
+    }}
+    .chunk-media img {{
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(136,166,172,.18);
+      background: rgba(255,255,255,.7);
+      object-fit: cover;
+    }}
+    .chunk-media figcaption,
+    .chunk-video-caption {{
+      font-size: 12px;
+      color: #617980;
+      line-height: 1.55;
+    }}
+    .chunk-video-frame {{
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 1px solid rgba(136,166,172,.18);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(232,243,246,.82);
+    }}
+    .chunk-video-frame iframe,
+    .chunk-video-frame video {{
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+      background: #dfecee;
+    }}
+    .interactive-widget {{
+      display: grid;
+      gap: 10px;
+    }}
+    .interactive-canvas {{
+      border: 1px solid rgba(136,166,172,.18);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(237,245,245,.92));
+      padding: 10px;
+    }}
+    .interactive-canvas svg {{
+      width: 100%;
+      height: auto;
+      display: block;
+      touch-action: none;
+    }}
+    .interactive-meta {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #607983;
+    }}
+    .interactive-badge {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(136,166,172,.18);
+      background: rgba(255,255,255,.72);
+    }}
+    .interactive-slider {{
+      width: min(220px, 100%);
+      accent-color: #6d9f96;
+    }}
+    @media (max-width: 700px) {{
+      .chunk-example-grid {{
+        grid-template-columns: 1fr;
+      }}
+    }}
     .footer-nav {{ margin-top:12px; display:flex; justify-content:space-between; gap:10px; }}
     .inspector-fab {{
       position: fixed; top: 12px; right: 510px; z-index: 60;
@@ -1034,6 +1215,45 @@
     .chunk-mod-card[data-status="skipped"] {{
       opacity: 0.5;
     }}
+    .chunk-mod-candidate-head {{
+      font-size: 12px;
+      color: rgba(54, 81, 95, 0.88);
+      margin-bottom: 8px;
+    }}
+    .chunk-mod-candidate-btn {{
+      width: 100%;
+      border: 1px solid rgba(126, 164, 173, 0.32);
+      background: rgba(249, 252, 252, 0.92);
+      border-radius: 16px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }}
+    .chunk-mod-candidate-btn:hover {{
+      transform: translateY(-1px);
+      border-color: rgba(109, 159, 150, 0.44);
+      box-shadow: 0 10px 24px rgba(109, 159, 150, 0.08);
+    }}
+    .chunk-mod-candidate-btn:disabled {{
+      opacity: 0.6;
+      cursor: wait;
+    }}
+    .chunk-mod-candidate-label {{
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: rgba(109, 159, 150, 0.92);
+    }}
+    .chunk-mod-candidate-title {{
+      font-size: 14px;
+      font-weight: 600;
+      color: #2f4d59;
+      text-align: left;
+    }}
     .status-applying, .status-success, .status-failed, .status-skipped {{
       font-size: 13px;
       padding: 6px 12px;
@@ -1390,6 +1610,9 @@
           chunk.chapterNo = Number(meta.chapter_no || chapterIdx + 1);
           chunk.chunkNo = Number(meta.chunk_no || chunkIdx + 1);
           chunk.pageId = meta.page_id || chunk.pageId || '';
+          if (Array.isArray(meta.blocks) && meta.blocks.length) {{
+            applyBlocksToChunkModel(chunk, meta.blocks, meta.title || chunk.title || '');
+          }}
         }});
       }});
       chatState.chunkMetaLoaded = true;
@@ -1441,16 +1664,166 @@
         .map((x) => x.trim())
         .filter(Boolean);
     }}
+    function parseStructuredFields(lines) {{
+      const payload = {{}};
+      (lines || []).forEach((line) => {{
+        const match = String(line || '').match(/^([a-zA-Z_][\w-]*):\s*(.*)$/);
+        if (!match) return;
+        payload[match[1]] = match[2].trim();
+      }});
+      return payload;
+    }}
+    function decomposeBlocks(blocks) {{
+      const result = {{
+        paragraphs: [],
+        bullets: [],
+        tables: [],
+        embeds: [],
+        interactions: [],
+        codes: [],
+      }};
+      (Array.isArray(blocks) ? blocks : []).forEach((block) => {{
+        if (!block || typeof block !== 'object') return;
+        const type = String(block.type || '').trim().toLowerCase();
+        if (type === 'paragraph') {{
+          const text = String(block.text || '').trim();
+          if (text) result.paragraphs.push(text);
+          return;
+        }}
+        if (type === 'bullet_list') {{
+          (Array.isArray(block.items) ? block.items : []).forEach((item) => {{
+            const text = String(item || '').trim();
+            if (text) result.bullets.push(text);
+          }});
+          return;
+        }}
+        if (['example', 'demo', 'image', 'video', 'interactive'].includes(type)) {{
+          result.embeds.push({{ ...block }});
+        }}
+      }});
+      return result;
+    }}
+    function applyBlocksToChunkModel(chunk, blocks, nextTitle) {{
+      const parsed = decomposeBlocks(blocks);
+      chunk.blocks = Array.isArray(blocks) ? blocks.map((item) => (item && typeof item === 'object' ? {{ ...item }} : item)) : [];
+      if (nextTitle) chunk.title = nextTitle;
+      chunk.paragraphs = parsed.paragraphs;
+      chunk.bullets = parsed.bullets;
+      chunk.tables = parsed.tables;
+      chunk.embeds = parsed.embeds;
+      chunk.interactions = parsed.interactions;
+      chunk.codes = parsed.codes;
+      chunk.content = chunkPlainText(chunk);
+    }}
+    function parseChunkBody(text, currentTitle = '') {{
+      const normalized = normalizeEscapes(text);
+      const result = {{
+        paragraphs: [],
+        bullets: [],
+        tables: [],
+        embeds: [],
+        interactions: [],
+        codes: [],
+      }};
+      const lines = String(normalized || '').replace(/\r\n/g, '\n').split('\n');
+      let paragraph = [];
+      let tableRows = [];
+      let inCode = false;
+      let codeLang = '';
+      let codeLines = [];
+      let skippedTitle = false;
+      const currentTitleNorm = normalizeChunkTitle(currentTitle || '').trim();
+
+      const flushParagraph = () => {{
+        if (!paragraph.length) return;
+        const textBlock = paragraph.join('\n').trim();
+        paragraph = [];
+        if (!textBlock) return;
+        if (!skippedTitle && currentTitleNorm && normalizeChunkTitle(textBlock) === currentTitleNorm) {{
+          skippedTitle = true;
+          return;
+        }}
+        result.paragraphs.push(textBlock);
+      }};
+      const flushTable = () => {{
+        if (!tableRows.length) return;
+        const header = tableRows[0] || [];
+        const rows = tableRows.slice(1);
+        if (header.length) result.tables.push({{ header, rows }});
+        tableRows = [];
+      }};
+
+      lines.forEach((raw) => {{
+        const line = String(raw || '').replace(/\r/g, '');
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith('```')) {{
+          flushParagraph();
+          flushTable();
+          if (!inCode) {{
+            inCode = true;
+            codeLang = trimmed.slice(3).trim().toLowerCase();
+            codeLines = [];
+            return;
+          }}
+          inCode = false;
+          const payload = parseStructuredFields(codeLines);
+          if (['example', 'demo', 'image', 'video', 'interactive'].includes(codeLang)) {{
+            result.embeds.push({{ ...payload, type: codeLang }});
+          }} else if (codeLang === 'interaction') {{
+            result.interactions.push(payload);
+          }} else {{
+            result.codes.push(codeLines.join('\n').trim());
+          }}
+          codeLang = '';
+          codeLines = [];
+          return;
+        }}
+
+        if (inCode) {{
+          codeLines.push(line);
+          return;
+        }}
+
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {{
+          flushParagraph();
+          const cols = trimmed.slice(1, -1).split('|').map((cell) => cell.trim());
+          if (!cols.every((cell) => /^[-:\s]*$/.test(cell))) {{
+            tableRows.push(cols);
+          }}
+          return;
+        }}
+        flushTable();
+
+        if (!trimmed) {{
+          flushParagraph();
+          return;
+        }}
+
+        if (/^#+\s+/.test(trimmed)) {{
+          flushParagraph();
+          return;
+        }}
+
+        if (/^[-*+]\s+/.test(trimmed)) {{
+          flushParagraph();
+          result.bullets.push(trimmed.replace(/^[-*+]\s+/, ''));
+          return;
+        }}
+
+        paragraph.push(line);
+      }});
+
+      flushParagraph();
+      flushTable();
+      return result;
+    }}
     function applyChunkUpdateLocally(chunkKey, chunkData) {{
       const ref = getChunkRefByKey(chunkKey);
       if (!ref) return;
-      if (chunkData.new_title) ref.chunk.title = chunkData.new_title;
-      ref.chunk.content = chunkData.rewritten_content || '';
-      ref.chunk.paragraphs = contentToParagraphs(chunkData.rewritten_content || '');
-      ref.chunk.bullets = [];
-      ref.chunk.tables = [];
-      ref.chunk.interactions = [];
-      ref.chunk.codes = [];
+      const nextTitle = chunkData.new_title || ref.chunk.title || '';
+      const nextBlocks = Array.isArray(chunkData.rewritten_blocks) ? chunkData.rewritten_blocks : [];
+      applyBlocksToChunkModel(ref.chunk, nextBlocks, nextTitle);
       const selected = chatState.selectedChunks.find((x) => x.key === chunkKey);
       if (selected) {{
         selected.title = normalizeChunkTitle(ref.chunk.title || '');
@@ -1708,10 +2081,7 @@
       if (!text) return;
 
       const chunksToUse = [...chatState.selectedChunks];
-      if (chatState.aiEditMode && chunksToUse.length === 0) {{
-        showToast('请先选择要编辑的 chunk', 'warn');
-        return;
-      }}
+      const routeToModification = chatState.aiEditMode || looksLikeModificationRequest(text);
 
       // 正常 Chat 流程
       const selectedContext = chunksToUse
@@ -1727,14 +2097,24 @@
       autoGrowChatInput();
       chatState.sending = true;
       if (btn) btn.disabled = true;
-      let pending = appendPendingAssistant(chatState.aiEditMode ? '正在分析修改建议…' : '正在输出…');
+      let pending = appendPendingAssistant(routeToModification ? '正在分析修改建议…' : '正在输出…');
       try {{
-        if (chatState.aiEditMode && chunksToUse.length > 0) {{
-          const intentResult = await analyzeIntent(text, true);
+        if (routeToModification) {{
+          const intentResult = await analyzeIntent(text, chatState.aiEditMode);
+          if (intentResult && intentResult.needs_target_resolution) {{
+            removePendingAssistant(pending);
+            pending = null;
+            showModificationCandidateChooser(text, intentResult.candidate_chunks || []);
+            return;
+          }}
           if (intentResult && intentResult.is_modification) {{
             removePendingAssistant(pending);
             pending = null;
             showModificationSuggestions(intentResult.chunks || []);
+            return;
+          }}
+          if (intentResult && intentResult.chat_reply) {{
+            resolvePendingAssistant(pending, intentResult.chat_reply, true);
             return;
           }}
           updatePendingAssistant(pending, '正在输出…');
@@ -2039,6 +2419,7 @@
         (chunk.paragraphs || []).length ||
         (chunk.bullets || []).length ||
         (chunk.tables || []).length ||
+        (chunk.embeds || []).length ||
         (chunk.interactions || []).length ||
         (chunk.codes || []).length
       );
@@ -2167,6 +2548,168 @@
         return `<div class='interaction'><strong>${{t}}</strong><p><b>输入:</b> ${{input}}</p><button onclick="showOut('${{id}}')">${{btn}}</button><pre id='${{id}}'>${{out}}</pre></div>`;
       }}).join('');
     }}
+    function safeMediaUrl(url) {{
+      const value = String(url || '').trim();
+      if (!value) return '';
+      if (/^https?:\/\//i.test(value)) return value;
+      if (/^(\/|\.\/|\.\.\/)/.test(value)) return value;
+      return '';
+    }}
+    function jsonField(value, fallback) {{
+      if (typeof value !== 'string' || !value.trim()) return fallback;
+      try {{
+        return JSON.parse(value);
+      }} catch (_) {{
+        return fallback;
+      }}
+    }}
+    function normalizeEmbedText(value, fallback = '') {{
+      return String(value || fallback || '').trim();
+    }}
+    function normalizeYoutubeUrl(url) {{
+      const value = safeMediaUrl(url);
+      if (!value.startsWith('http')) return value;
+      try {{
+        const parsed = new URL(value);
+        const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+        if (host === 'youtu.be') {{
+          const id = parsed.pathname.replace(/^\/+/, '').trim();
+          return id ? `https://www.youtube.com/embed/${{id}}` : value;
+        }}
+        if (host === 'youtube.com' || host === 'm.youtube.com') {{
+          if (parsed.pathname === '/watch') {{
+            const id = parsed.searchParams.get('v');
+            return id ? `https://www.youtube.com/embed/${{id}}` : value;
+          }}
+        }}
+      }} catch (_) {{}}
+      return value;
+    }}
+    function buildEmbeds(items, chapterIdx = state.chapterIdx, chunkIdx = state.chunkIdx) {{
+      return (items || []).map((item, idx) => {{
+        if (!item || typeof item !== 'object') return '';
+        const type = String(item.type || '').trim().toLowerCase();
+        if (!type) return '';
+        const title = inlineMd(item.title || item.caption || item.alt || `展示块 ${{idx + 1}}`);
+        const desc = normalizeEmbedText(item.description || item.desc || item.caption);
+        const head = `
+          <div class='chunk-embed-head'>
+            <div class='chunk-embed-kicker'>${{esc(type)}}</div>
+            <div class='chunk-embed-title'>${{title}}</div>
+            ${{desc ? `<p class='chunk-embed-desc'>${{inlineMd(desc)}}</p>` : ''}}
+          </div>
+        `;
+        if (type === 'example') {{
+          const input = normalizeEmbedText(item.input, '（未提供输入）');
+          const output = normalizeEmbedText(item.output, '（未提供输出）');
+          return `
+            <section class='chunk-embed'>
+              ${{head}}
+              <div class='chunk-embed-body'>
+                <div class='chunk-example-grid'>
+                  <div class='chunk-example-cell'>
+                    <div class='chunk-example-label'>Input</div>
+                    <div class='chunk-example-value'>${{inlineMd(input)}}</div>
+                  </div>
+                  <div class='chunk-example-cell'>
+                    <div class='chunk-example-label'>Output</div>
+                    <div class='chunk-example-value'>${{inlineMd(output)}}</div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          `;
+        }}
+        if (type === 'demo') {{
+          const mode = normalizeEmbedText(item.mode, 'reveal').toLowerCase();
+          const input = normalizeEmbedText(item.input, '（未提供输入）');
+          const output = normalizeEmbedText(item.output, '（未提供输出）');
+          const buttonLabel = normalizeEmbedText(item.button_label || item.button, '运行看看');
+          const demoId = `embed_demo_${{chapterIdx}}_${{chunkIdx}}_${{idx}}`;
+          return `
+            <section class='chunk-embed'>
+              ${{head}}
+              <div class='chunk-embed-body'>
+                <div class='chunk-demo-input'>${{inlineMd(input)}}</div>
+                <div class='chunk-demo-actions'>
+                  <button class='chunk-demo-run' type='button' data-demo-id='${{escAttr(demoId)}}' data-demo-mode='${{escAttr(mode)}}' data-demo-output='${{escAttr(output)}}'>${{esc(buttonLabel)}}</button>
+                </div>
+                <pre class='chunk-demo-output' id='${{escAttr(demoId)}}'></pre>
+              </div>
+            </section>
+          `;
+        }}
+        if (type === 'image') {{
+          const url = safeMediaUrl(item.url || item.src);
+          if (!url) return '';
+          const caption = normalizeEmbedText(item.caption || item.description);
+          const alt = normalizeEmbedText(item.alt || item.title || '图片');
+          return `
+            <section class='chunk-embed'>
+              ${{head}}
+              <div class='chunk-embed-body'>
+                <figure class='chunk-media'>
+                  <img src='${{escAttr(url)}}' alt='${{escAttr(alt)}}' loading='lazy' />
+                  ${{caption ? `<figcaption>${{inlineMd(caption)}}</figcaption>` : ''}}
+                </figure>
+              </div>
+            </section>
+          `;
+        }}
+        if (type === 'video') {{
+          const rawUrl = item.url || item.src;
+          const url = normalizeYoutubeUrl(rawUrl);
+          if (!url) return '';
+          const caption = normalizeEmbedText(item.caption || item.description);
+          const lower = url.toLowerCase();
+          const isHtmlVideo = /\.(mp4|webm|ogg)(\?|#|$)/.test(lower);
+          const body = isHtmlVideo
+            ? `<div class='chunk-video-frame'><video controls playsinline preload='metadata'${{item.poster ? ` poster='${{escAttr(safeMediaUrl(item.poster))}}'` : ''}}><source src='${{escAttr(url)}}' /></video></div>`
+            : `<div class='chunk-video-frame'><iframe src='${{escAttr(url)}}' loading='lazy' allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share' allowfullscreen></iframe></div>`;
+          return `
+            <section class='chunk-embed'>
+              ${{head}}
+              <div class='chunk-embed-body'>
+                ${{body}}
+                ${{caption ? `<div class='chunk-video-caption'>${{inlineMd(caption)}}</div>` : ''}}
+              </div>
+            </section>
+          `;
+        }}
+        if (type === 'interactive') {{
+          const widget = normalizeEmbedText(item.widget, 'triangle-point-slider');
+          if (widget !== 'triangle-point-slider') return '';
+          const config = {{
+            triangle: jsonField(item.triangle, [[0.08, 0.86], [0.92, 0.86], [0.46, 0.14]]),
+            edge: normalizeEmbedText(item.edge, 'AB').toUpperCase(),
+            initialT: Number(item.initial_t ?? item.initialT ?? 0.35),
+          }};
+          const widgetId = `embed_widget_${{chapterIdx}}_${{chunkIdx}}_${{idx}}`;
+          return `
+            <section class='chunk-embed'>
+              ${{head}}
+              <div class='chunk-embed-body'>
+                <div class='interactive-widget' data-widget='triangle-point-slider' data-widget-id='${{escAttr(widgetId)}}' data-widget-config='${{escAttr(JSON.stringify(config))}}'>
+                  <div class='interactive-canvas' id='${{escAttr(widgetId)}}'></div>
+                  <div class='interactive-meta'>
+                    <span class='interactive-badge'>拖动点 P 沿 ${{esc(config.edge)}} 边移动</span>
+                    <input class='interactive-slider' type='range' min='0' max='1' step='0.01' value='${{escAttr(String(Math.max(0, Math.min(1, config.initialT))))}}' data-widget-slider='${{escAttr(widgetId)}}' />
+                  </div>
+                </div>
+              </div>
+            </section>
+          `;
+        }}
+        return `
+          <section class='chunk-embed'>
+            ${{head}}
+            <div class='chunk-embed-body'>
+              <p class='chunk-embed-desc'>Unsupported embed type: <code>${{esc(type)}}</code></p>
+            </div>
+          </section>
+        `;
+      }}).join('');
+    }}
     function chunkPlainText(chunk) {{
       const parts = [];
       (chunk.paragraphs || []).forEach((p) => parts.push(String(p || '').trim()));
@@ -2183,6 +2726,17 @@
       }}
       if ((chunk.codes || []).length) {{
         (chunk.codes || []).forEach((c) => parts.push(String(c || '').trim()));
+      }}
+      if ((chunk.embeds || []).length) {{
+        (chunk.embeds || []).forEach((embed) => {{
+          const type = String(embed.type || '').trim();
+          const title = String(embed.title || '').trim();
+          const description = String(embed.description || embed.caption || '').trim();
+          const input = String(embed.input || '').trim();
+          const output = String(embed.output || '').trim();
+          const summary = [type, title, description, input && `输入: ${{input}}`, output && `输出: ${{output}}`].filter(Boolean).join('\n');
+          if (summary) parts.push(summary);
+        }});
       }}
       return parts.filter(Boolean).join('\\n');
     }}
@@ -2274,10 +2828,11 @@
     }}
     function renderCard() {{
       const chapter = MODEL.chapters[state.chapterIdx];
-      const chunk = chapter.chunks[state.chunkIdx] || {{ title:'', paragraphs:[], bullets:[], tables:[], interactions:[] }};
+      const chunk = chapter.chunks[state.chunkIdx] || {{ title:'', paragraphs:[], bullets:[], tables:[], embeds: [], interactions:[] }};
       const paras = (chunk.paragraphs || []).map((p) => `<p>${{inlineMd(p.replace(/^#+\s+/, ''))}}</p>`).join('');
       const bullets = (chunk.bullets || []).length ? `<h4>关键要点</h4><ul>${{chunk.bullets.map((x) => `<li>${{inlineMd(x)}}</li>`).join('')}}</ul>` : '';
       const tables = buildTables(chunk.tables);
+      const embeds = buildEmbeds(chunk.embeds, state.chapterIdx, state.chunkIdx);
       const inter = buildInteractions(chunk.interactions, state.chapterIdx, state.chunkIdx);
       const codes = (chunk.codes || []).map((c) => `<h4>代码片段</h4><pre>${{esc(c)}}</pre>`).join('');
       const cleanTitle = normalizeChunkTitle(chunk.title || '');
@@ -2289,7 +2844,7 @@
         : '';
       const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
       const actionBtns = buildChunkActionButtons(state.chapterIdx, state.chunkIdx, chunk);
-      $('chunkCard').innerHTML = `${{actionBtns}}${{chapterHead}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}`;
+      $('chunkCard').innerHTML = `${{actionBtns}}${{chapterHead}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{embeds ? `<div class='chunk-embeds'>${{embeds}}</div>` : ''}}${{inter}}${{codes}}`;
       const percent = Math.round(((flatIndex(state.chapterIdx, state.chunkIdx) + 1) / flatCount()) * 100);
       setProgress(percent);
       $('prevBtn').disabled = state.chapterIdx === 0 && state.chunkIdx === 0;
@@ -2302,15 +2857,16 @@
           const paras = (chunk.paragraphs || []).map((p) => `<p>${{inlineMd(p.replace(/^#+\s+/, ''))}}</p>`).join('');
           const bullets = (chunk.bullets || []).length ? `<h4>关键要点</h4><ul>${{chunk.bullets.map((x) => `<li>${{inlineMd(x)}}</li>`).join('')}}</ul>` : '';
           const tables = buildTables(chunk.tables);
+          const embeds = buildEmbeds(chunk.embeds, ci, ki);
           const inter = buildInteractions(chunk.interactions, ci, ki);
           const codes = (chunk.codes || []).map((c) => `<h4>代码片段</h4><pre>${{esc(c)}}</pre>`).join('');
           const cleanTitle = normalizeChunkTitle(chunk.title || '');
-          const hasBody = !!(paras || bullets || tables || inter || codes);
+          const hasBody = !!(paras || bullets || tables || embeds || inter || codes);
           const showChunkTitle = !!cleanTitle;
           if (!hasBody && !showChunkTitle) return '';
           const chunkHead = showChunkTitle ? `<h2>${{inlineMd(cleanTitle)}}</h2>` : '';
           const actionBtns = buildChunkActionButtons(ci, ki, chunk);
-          return `<article class='chunk-card' id='chunk-${{ci}}-${{ki}}'${{chunk && chunk.id ? ` data-chunk-id='${{escAttr(chunk.id)}}'` : ''}}>${{actionBtns}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{inter}}${{codes}}</article>`;
+          return `<article class='chunk-card' id='chunk-${{ci}}-${{ki}}'${{chunk && chunk.id ? ` data-chunk-id='${{escAttr(chunk.id)}}'` : ''}}>${{actionBtns}}${{chunkHead}}${{paras}}${{bullets}}${{tables}}${{embeds ? `<div class='chunk-embeds'>${{embeds}}</div>` : ''}}${{inter}}${{codes}}</article>`;
         }}).join('');
         const chapterTitle = normalizeChapterTitle(chapter.title || '', ci);
         const showChapterHead = !!chapterTitle;
@@ -2412,6 +2968,7 @@
         $('pagerNav').style.display = 'none';
         renderNav();
         $('contentFlow').innerHTML = `<section class='chapter-block' id='chapter-0'><article class='chunk-card'><p>当前课件已无可展示的 Chunk。</p></article></section>`;
+        mountEmbedWidgets();
         applyChunkSelectionUI();
         return;
       }}
@@ -2431,6 +2988,7 @@
       renderNav();
       if (continuous) renderContinuous();
       else renderCard();
+      mountEmbedWidgets();
       applyChunkSelectionUI();
     }}
     function navToggleIcon(collapsed) {{
@@ -2573,6 +3131,168 @@
       if (!el) return;
       el.style.display = 'block';
     }}
+    function clearDemoTimer(el) {{
+      if (!el || !el.__demoTimer) return;
+      window.clearInterval(el.__demoTimer);
+      el.__demoTimer = null;
+    }}
+    function runDemoOutput(outputEl, mode, text) {{
+      if (!outputEl) return;
+      const normalizedMode = String(mode || 'reveal').trim().toLowerCase();
+      const safeText = String(text || '').trim() || '（未提供输出）';
+      clearDemoTimer(outputEl);
+      outputEl.style.display = 'block';
+      outputEl.textContent = '';
+      if (normalizedMode === 'reveal') {{
+        outputEl.textContent = safeText;
+        return;
+      }}
+      if (normalizedMode === 'step') {{
+        const steps = safeText.split(/\\n{{2,}}/).filter(Boolean);
+        let idx = 0;
+        outputEl.textContent = steps[0] || safeText;
+        outputEl.__demoTimer = window.setInterval(() => {{
+          idx += 1;
+          if (idx >= steps.length) {{
+            clearDemoTimer(outputEl);
+            return;
+          }}
+          outputEl.textContent = steps.slice(0, idx + 1).join('\\n\\n');
+        }}, 420);
+        return;
+      }}
+      const maxTypingTime = 5000;
+      const interval = Math.max(12, Math.floor(maxTypingTime / Math.max(1, safeText.length)));
+      let idx = 0;
+      outputEl.__demoTimer = window.setInterval(() => {{
+        idx += 1;
+        outputEl.textContent = safeText.slice(0, idx);
+        if (idx >= safeText.length) {{
+          clearDemoTimer(outputEl);
+        }}
+      }}, interval);
+    }}
+    function clamp01(value) {{
+      const num = Number(value);
+      if (!Number.isFinite(num)) return 0;
+      return Math.max(0, Math.min(1, num));
+    }}
+    function edgePoints(triangle, edge) {{
+      const safe = Array.isArray(triangle) && triangle.length >= 3 ? triangle : [[0.08, 0.86], [0.92, 0.86], [0.46, 0.14]];
+      const map = {{
+        AB: [safe[0], safe[1]],
+        BC: [safe[1], safe[2]],
+        CA: [safe[2], safe[0]],
+      }};
+      return map[String(edge || 'AB').toUpperCase()] || map.AB;
+    }}
+    function renderTrianglePointSlider(container, config) {{
+      if (!container) return;
+      const triangle = Array.isArray(config && config.triangle) && config.triangle.length >= 3
+        ? config.triangle
+        : [[0.08, 0.86], [0.92, 0.86], [0.46, 0.14]];
+      const edge = String((config && config.edge) || 'AB').toUpperCase();
+      const slider = document.querySelector(`[data-widget-slider="${{container.id}}"]`);
+      const meta = container.parentElement ? container.parentElement.querySelector('.interactive-badge') : null;
+      let t = clamp01(config && (config.initialT ?? config.initial_t ?? 0.35));
+      const [start, end] = edgePoints(triangle, edge);
+      const svgNs = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(svgNs, 'svg');
+      svg.setAttribute('viewBox', '0 0 100 100');
+      svg.setAttribute('role', 'img');
+      svg.setAttribute('aria-label', '三角形动点演示');
+      const polygon = document.createElementNS(svgNs, 'polygon');
+      polygon.setAttribute('points', triangle.map((pt) => `${{pt[0] * 100}},${{pt[1] * 100}}`).join(' '));
+      polygon.setAttribute('fill', 'rgba(143,190,202,0.12)');
+      polygon.setAttribute('stroke', '#7ea8b6');
+      polygon.setAttribute('stroke-width', '1.4');
+      const edgeLine = document.createElementNS(svgNs, 'line');
+      edgeLine.setAttribute('x1', String(start[0] * 100));
+      edgeLine.setAttribute('y1', String(start[1] * 100));
+      edgeLine.setAttribute('x2', String(end[0] * 100));
+      edgeLine.setAttribute('y2', String(end[1] * 100));
+      edgeLine.setAttribute('stroke', '#5f8f83');
+      edgeLine.setAttribute('stroke-width', '2.8');
+      edgeLine.setAttribute('stroke-linecap', 'round');
+      const point = document.createElementNS(svgNs, 'circle');
+      point.setAttribute('r', '3.4');
+      point.setAttribute('fill', '#5f8f83');
+      point.setAttribute('stroke', '#ffffff');
+      point.setAttribute('stroke-width', '1.4');
+      point.style.cursor = 'grab';
+      const label = document.createElementNS(svgNs, 'text');
+      label.setAttribute('font-size', '6');
+      label.setAttribute('fill', '#406e67');
+      label.setAttribute('font-weight', '700');
+      label.textContent = 'P';
+      const update = (value) => {{
+        t = clamp01(value);
+        const x = (start[0] + (end[0] - start[0]) * t) * 100;
+        const y = (start[1] + (end[1] - start[1]) * t) * 100;
+        point.setAttribute('cx', String(x));
+        point.setAttribute('cy', String(y));
+        label.setAttribute('x', String(x + 4.2));
+        label.setAttribute('y', String(y - 4.2));
+        if (slider) slider.value = t.toFixed(2);
+        if (meta) meta.textContent = `拖动点 P 沿 ${{edge}} 边移动 · t=${{t.toFixed(2)}}`;
+      }};
+      svg.appendChild(polygon);
+      svg.appendChild(edgeLine);
+      svg.appendChild(point);
+      svg.appendChild(label);
+      container.innerHTML = '';
+      container.appendChild(svg);
+      const applyFromPointer = (evt) => {{
+        const rect = svg.getBoundingClientRect();
+        const px = (evt.clientX - rect.left) / rect.width;
+        const py = (evt.clientY - rect.top) / rect.height;
+        const dx = end[0] - start[0];
+        const dy = end[1] - start[1];
+        const denom = dx * dx + dy * dy || 1;
+        const projected = ((px - start[0]) * dx + (py - start[1]) * dy) / denom;
+        update(projected);
+      }};
+      let dragging = false;
+      point.addEventListener('pointerdown', (evt) => {{
+        dragging = true;
+        point.style.cursor = 'grabbing';
+        point.setPointerCapture(evt.pointerId);
+      }});
+      point.addEventListener('pointermove', (evt) => {{
+        if (!dragging) return;
+        applyFromPointer(evt);
+      }});
+      const stopDragging = (evt) => {{
+        if (!dragging) return;
+        dragging = false;
+        point.style.cursor = 'grab';
+        try {{
+          point.releasePointerCapture(evt.pointerId);
+        }} catch (_) {{}}
+      }};
+      point.addEventListener('pointerup', stopDragging);
+      point.addEventListener('pointercancel', stopDragging);
+      if (slider) {{
+        slider.addEventListener('input', () => update(slider.value));
+      }}
+      update(t);
+    }}
+    function mountEmbedWidgets(scope = document) {{
+      const root = scope instanceof Element || scope instanceof Document ? scope : document;
+      root.querySelectorAll('.interactive-widget[data-widget="triangle-point-slider"]').forEach((widget) => {{
+        if (!(widget instanceof HTMLElement)) return;
+        const canvasId = widget.getAttribute('data-widget-id') || '';
+        const canvas = canvasId ? document.getElementById(canvasId) : widget.querySelector('.interactive-canvas');
+        if (!(canvas instanceof HTMLElement)) return;
+        const rawConfig = widget.getAttribute('data-widget-config') || '';
+        const config = jsonField(rawConfig, {{
+          triangle: [[0.08, 0.86], [0.92, 0.86], [0.46, 0.14]],
+          edge: 'AB',
+          initialT: 0.35,
+        }});
+        renderTrianglePointSlider(canvas, config);
+      }});
+    }}
     window.addChunkToChat = addChunkToChat;
     window.removeSelectedChunk = removeSelectedChunk;
     window.deleteChunk = deleteChunk;
@@ -2621,6 +3341,24 @@
       chatListEl.addEventListener('click', (e) => {{
         const target = e.target instanceof Element ? e.target : null;
         if (!target) return;
+        const modCandidate = target.closest('.chunk-mod-candidate-btn');
+        if (modCandidate instanceof HTMLElement) {{
+          const row = modCandidate.closest('.msg.assistant');
+          const message = row && row.dataset ? row.dataset.modificationMessage || '' : '';
+          const chunkKey = modCandidate.dataset ? modCandidate.dataset.modKey || '' : '';
+          if (!message || !chunkKey) return;
+          modCandidate.setAttribute('disabled', 'disabled');
+          resolveModificationCandidate(message, chunkKey)
+            .then(() => {{
+              if (row && row.parentNode) row.parentNode.removeChild(row);
+            }})
+            .catch((err) => {{
+              console.error('resolveModificationCandidate failed:', err);
+              modCandidate.removeAttribute('disabled');
+              showToast('定位卡片后修改失败，请重试。', 'error');
+            }});
+          return;
+        }}
         const refCard = target.closest('.msg-ref-card');
         if (!(refCard instanceof HTMLElement)) return;
         const chunkId = refCard.getAttribute('data-chunk-id') || '';
@@ -2651,6 +3389,13 @@
       contentRoot.addEventListener('click', (e) => {{
         const target = e.target instanceof Element ? e.target : null;
         if (!target) return;
+        const demoBtn = target.closest('.chunk-demo-run');
+        if (demoBtn instanceof HTMLElement) {{
+          const demoId = demoBtn.getAttribute('data-demo-id') || '';
+          const outputEl = demoId ? document.getElementById(demoId) : null;
+          runDemoOutput(outputEl, demoBtn.getAttribute('data-demo-mode') || 'reveal', demoBtn.getAttribute('data-demo-output') || '');
+          return;
+        }}
         const actionBtn = target.closest('[data-action]');
         if (!(actionBtn instanceof HTMLElement)) return;
         const action = actionBtn.getAttribute('data-action') || '';
@@ -2766,14 +3511,15 @@
     const chunkModifications = new Map();
     const chunkSuggestionsData = new Map();
 
-    async function analyzeIntent(message, explicitMode) {{
+    async function analyzeIntent(message, explicitMode, overrideChunks = null) {{
       try {{
         const response = await fetch('/api/v1/intent/analyze', {{
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
           body: JSON.stringify({{
             message: message,
-            chunks: chatState.selectedChunks,
+            chunks: Array.isArray(overrideChunks) ? overrideChunks : chatState.selectedChunks,
+            courseware_id: chatCoursewareId || '',
             explicit_mode: explicitMode
           }})
         }});
@@ -2786,6 +3532,42 @@
         console.error('Intent analysis failed:', err);
         return null;
       }}
+    }}
+
+    function looksLikeModificationRequest(message) {{
+      const text = String(message || '').trim().toLowerCase();
+      if (!text) return false;
+      const directTerms = [
+        '修改', '改一下', '改成', '重写', '优化', '润色', '删除', '删掉',
+        '做成', '做一个', '加一个', '加一张', '加个', '添加', '换成', '改为'
+      ];
+      if (directTerms.some((term) => text.includes(term))) return true;
+      const patterns = [
+        /(?:这个|那个|这张|那张|这个卡片|那个卡片|这一段|那一段).{0,10}(?:修改|改一下|改成|重写|做成)/i,
+        /(?:第\s*\d+\s*章.{0,8}(?:第\s*\d+\s*(?:个)?\s*(?:chunk|块|小节|部分|卡片)?|chunk\s*\d+|\d+\.\d+)).{0,12}(?:修改|改一下|改成|做成|删除)/i
+      ];
+      return patterns.some((pattern) => pattern.test(text));
+    }}
+
+    function showModificationCandidateChooser(message, candidates) {{
+      const chatList = $('chatList');
+      if (!chatList || !Array.isArray(candidates) || !candidates.length) return;
+      const row = document.createElement('div');
+      row.className = 'msg assistant';
+      row.dataset.modificationMessage = message || '';
+      row.innerHTML = `
+        <div class='chunk-mod-list chunk-mod-candidate-list'>
+          <div class='chunk-mod-candidate-head'>定位到多个可能的卡片，请先选择要修改的目标卡片。</div>
+          ${candidates.map((c) => `
+            <button class='chunk-mod-candidate-btn' type='button' data-mod-key='${escAttr(c.key || '')}'>
+              <span class='chunk-mod-candidate-label'>${esc(c.label || 'Unknown Chunk')}</span>
+              <span class='chunk-mod-candidate-title'>${esc(c.title || '')}</span>
+            </button>
+          `).join('')}
+        </div>
+      `;
+      chatList.appendChild(row);
+      chatList.scrollTop = chatList.scrollHeight;
     }}
 
     function showModificationSuggestions(chunks) {{
@@ -2841,9 +3623,21 @@
             originalSnapshot ? originalSnapshot.title : '',
             originalSnapshot ? originalSnapshot.content : ''
           );
+          const rewrittenPreviewChunk = {{
+            title: c.new_title || (originalSnapshot ? originalSnapshot.title : ''),
+            paragraphs: [],
+            bullets: [],
+            tables: [],
+            embeds: [],
+            interactions: [],
+            codes: [],
+            blocks: [],
+            content: '',
+          }};
+          applyBlocksToChunkModel(rewrittenPreviewChunk, c.rewritten_blocks || [], rewrittenPreviewChunk.title || '');
           const rewrittenPreview = buildChunkPreviewText(
-            c.new_title || (originalSnapshot ? originalSnapshot.title : ''),
-            c.rewritten_content || ''
+            rewrittenPreviewChunk.title || '',
+            chunkPlainText(rewrittenPreviewChunk)
           );
 
           const originalDiv = document.createElement('div');
@@ -2893,6 +3687,24 @@
       }}
     }}
 
+    async function resolveModificationCandidate(message, chunkKey) {{
+      const snapshot = getChunkSnapshotByKey(chunkKey);
+      if (!snapshot) {{
+        showToast('未找到目标卡片，请重试。', 'error');
+        return;
+      }}
+      const intentResult = await analyzeIntent(message, true, [snapshot]);
+      if (intentResult && intentResult.is_modification) {{
+        showModificationSuggestions(intentResult.chunks || []);
+        return;
+      }}
+      if (intentResult && intentResult.chat_reply) {{
+        appendChat('assistant', intentResult.chat_reply);
+        return;
+      }}
+      showToast('无法生成修改建议，请重试。', 'error');
+    }}
+
     function escapeHtml(str) {{
       if (typeof str !== 'string') return str;
       return str
@@ -2917,7 +3729,7 @@
           method: 'POST',
           headers: {{ 'Content-Type': 'application/json' }},
           body: JSON.stringify({{
-            new_content: chunkData.rewritten_content || '',
+            new_blocks: chunkData.rewritten_blocks || [],
             new_title: chunkData.new_title || null,
             expected_version: chatState.coursewareVersion || 1
           }})
